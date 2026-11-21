@@ -25,7 +25,11 @@ export default definePanelExtension<{ count: number }>({
 });
 ```
 
-`panels/notes` is a working example.
+Working examples:
+
+- `panels/notes` keeps scratch notes per thread and sends them to the composer.
+- `panels/claude-config` reads the workspace to list Claude Code files: instructions, skills,
+  agents, commands, settings and hooks, and MCP servers.
 
 ## The contract
 
@@ -41,6 +45,8 @@ under `~/components/ui`. If a panel needs something the host does not offer, add
   - `setState` saves the tab's state.
   - `insertIntoComposer` adds text to the composer.
   - `openFile` opens a workspace file.
+  - `listDirectory` and `readFile` read the thread's workspace. They take workspace-relative paths
+    only and reject anything that leaves the workspace, such as `~/.claude`.
   - `openPanel` opens another extension panel.
   - `close` closes the tab.
 

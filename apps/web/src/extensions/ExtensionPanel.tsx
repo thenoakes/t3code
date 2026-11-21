@@ -9,6 +9,7 @@ import { type ExtensionSurface, useRightPanelStore } from "~/rightPanelStore";
 import { useThreadShell } from "~/state/entities";
 import { getPanelExtension } from "./registry";
 import type { PanelHost, PanelThread } from "./types";
+import { listWorkspaceDirectory, readWorkspaceFile } from "./workspaceFiles";
 
 /** Renders an extension surface, keeping a broken or missing extension inside its own tab. */
 export function ExtensionPanel(props: {
@@ -42,6 +43,10 @@ export function ExtensionPanel(props: {
       composerRef?.current?.insertTextAtEnd(text, { ensureLeadingBoundary: true }) === true,
     openFile: (relativePath, line) =>
       useRightPanelStore.getState().openFile(threadRef, relativePath, line),
+    listDirectory: (relativePath) =>
+      listWorkspaceDirectory(props.environmentId, props.workspaceRoot, relativePath),
+    readFile: (relativePath) =>
+      readWorkspaceFile(props.environmentId, props.workspaceRoot, relativePath),
     openPanel: (extensionId) =>
       useRightPanelStore.getState().openExtension(threadRef, extensionId, {
         multiple: getPanelExtension(extensionId)?.multiple,

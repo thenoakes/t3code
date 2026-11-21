@@ -43,6 +43,21 @@ export interface PanelProps<State = unknown> {
   readonly host: PanelHost<State>;
 }
 
+export interface PanelEntry {
+  /** Workspace-relative, using `/`. */
+  readonly path: string;
+  readonly kind: "file" | "directory";
+  /** Git ignores it, as with local settings files. */
+  readonly ignored: boolean;
+}
+
+export interface PanelFile {
+  readonly path: string;
+  readonly contents: string;
+  /** The file was too large to read whole; `contents` holds its start. */
+  readonly truncated: boolean;
+}
+
 /** What a panel may ask of the app. Grow this deliberately rather than reaching into stores. */
 export interface PanelHost<State = unknown> {
   /** Replaces this tab's persisted state. */
@@ -51,6 +66,13 @@ export interface PanelHost<State = unknown> {
   insertIntoComposer(text: string): boolean;
   /** Opens a workspace file in a Files tab, optionally at a 1-based line. */
   openFile(relativePath: string, line?: number): void;
+  /**
+   * Lists a workspace folder's immediate children; `""` is the root. Rejects when the thread has no
+   * workspace, the path leaves it, or the folder cannot be read.
+   */
+  listDirectory(relativePath: string): Promise<ReadonlyArray<PanelEntry>>;
+  /** Reads a workspace text file, or null when it does not exist. Rejects like `listDirectory`. */
+  readFile(relativePath: string): Promise<PanelFile | null>;
   /** Opens another extension panel by id. */
   openPanel(extensionId: string): void;
   /** Closes this tab. */
