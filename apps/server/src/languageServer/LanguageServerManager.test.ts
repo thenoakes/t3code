@@ -65,32 +65,33 @@ describe("LanguageServerManager", () => {
       if (started.type !== "started") throw new Error(`expected started, got ${started.type}`);
       expect(started.command).toMatch(/node_modules\/\.bin\/typescript-language-server$/);
 
+      // One batch is written in order.
       yield* manager.send({
         sessionId: started.sessionId,
-        message: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "initialize",
-          params: { x: "é" },
-        }),
+        messages: [
+          JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { x: "é" } }),
+          JSON.stringify({ jsonrpc: "2.0", id: 2, method: "shutdown" }),
+        ],
       });
-      const reply = yield* Queue.take(events);
-      if (reply.type !== "message") throw new Error(`expected message, got ${reply.type}`);
-      expect(JSON.parse(reply.message)).toEqual({
-        id: 1,
-        result: { cwd: yield* fileSystem.realPath(cwd), echo: { x: "é" } },
-      });
+      const replies = [yield* Queue.take(events), yield* Queue.take(events)].map((event) =>
+        event.type === "message" ? JSON.parse(event.message) : event,
+      );
+      const realCwd = yield* fileSystem.realPath(cwd);
+      expect(replies).toEqual([
+        { id: 1, result: { cwd: realCwd, echo: { x: "é" } } },
+        { id: 2, result: { cwd: realCwd } },
+      ]);
 
       yield* manager.send({
         sessionId: started.sessionId,
-        message: JSON.stringify({ jsonrpc: "2.0", method: "exit" }),
+        messages: [JSON.stringify({ jsonrpc: "2.0", method: "exit" })],
       });
       expect(yield* Queue.take(events)).toEqual({ type: "exited", exitCode: 3, stderr: "bye" });
       yield* Fiber.join(fiber);
 
       // The session ends with the stream.
       const late = yield* manager
-        .send({ sessionId: started.sessionId, message: "{}" })
+        .send({ sessionId: started.sessionId, messages: ["{}"] })
         .pipe(Effect.exit);
       expect(Exit.isFailure(late)).toBe(true);
     }).pipe(Effect.scoped, Effect.provide(layer)),

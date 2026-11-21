@@ -5,6 +5,7 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Button } from "~/components/ui/button";
 import type { PanelProps } from "../../types";
 import type { CodeEditorState } from "./index";
+import { acquireWorkspaceLanguageClient, type LanguageClientStatus } from "./languageClient";
 import { startMonaco } from "./monaco";
 import { nextUnsavedState, restoreUnsaved } from "./unsaved";
 
@@ -30,9 +31,13 @@ function fileUri(workspaceRoot: string, path: string): string {
   return Uri.file(`${workspaceRoot.replace(/[\\/]+$/, "")}${separator}${path}`).toString();
 }
 
+// Files the TypeScript language server answers for.
+const TYPESCRIPT_FILE = /\.(?:[cm]?ts|tsx)$/i;
+
 export default function CodeEditorPanel({
   state,
   host,
+  environmentId,
   workspaceRoot,
   workspaceRevision,
   visible,
@@ -49,6 +54,7 @@ export default function CodeEditorPanel({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<Conflict | null>(null);
+  const [languageStatus, setLanguageStatus] = useState<LanguageClientStatus | null>(null);
   const keepUnsavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const editorText = () => appRef.current?.getTextModels().modified?.getValue();
@@ -129,6 +135,7 @@ export default function CodeEditorPanel({
     let cancelled = false;
     let app: EditorApp | null = null;
     let contentListener: { dispose(): void } | undefined;
+    let releaseLanguageClient: (() => void) | undefined;
     void (async () => {
       try {
         const [file] = await Promise.all([host.readFile(filePath), startMonaco(appearance)]);
@@ -176,6 +183,14 @@ export default function CodeEditorPanel({
           keybindings: [KeyMod.CtrlCmd | KeyCode.KeyS],
           run: () => save(),
         });
+        if (TYPESCRIPT_FILE.test(filePath)) {
+          releaseLanguageClient = acquireWorkspaceLanguageClient(
+            `${environmentId}\u0000${root}`,
+            root,
+            host,
+            setLanguageStatus,
+          );
+        }
         setStatus(
           file.truncated
             ? { kind: "error", message: "File too large to edit; showing its start read-only." }
@@ -190,6 +205,7 @@ export default function CodeEditorPanel({
       // Keep the latest edits before the editor goes, as on a thread switch.
       if (app !== null) keepUnsaved(filePath);
       contentListener?.dispose();
+      releaseLanguageClient?.();
       appRef.current = null;
       void app?.dispose();
     };
@@ -313,6 +329,15 @@ export default function CodeEditorPanel({
       ) : null}
       {/* Monaco owns this element's children; React never renders into it. */}
       <div ref={containerRef} className="min-h-0 flex-1" />
+      {languageStatus ? (
+        <div className="truncate border-t px-3 py-1 text-muted-foreground text-xs">
+          {languageStatus.kind === "ready"
+            ? "TypeScript language server ready"
+            : languageStatus.kind === "starting"
+              ? "Starting TypeScript language server…"
+              : `TypeScript language server stopped. ${languageStatus.reason}`}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -106,6 +106,8 @@
       // named subcomponents even before they have callers; the file audit still
       // reports an entire component module when nothing imports it.
       "ignoreIssues": { "src/components/ui/*.tsx": ["exports", "nsExports", "duplicates"] },
+      // vite.config.ts aliases `vscode` to it for vscode-languageclient.
+      "ignoreDependencies": ["@codingame/monaco-vscode-extension-api"],
     },
     "apps/marketing": {
       // `astro check` runs from the typecheck task in vite.config.ts, which knip does not read.

@@ -1,4 +1,10 @@
-import type { EnvironmentId, ProjectId, ScopedThreadRef, ThreadId } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  LanguageServerLanguage,
+  ProjectId,
+  ScopedThreadRef,
+  ThreadId,
+} from "@t3tools/contracts";
 import type { ComponentType } from "react";
 
 /**
@@ -71,6 +77,27 @@ export interface PanelEntry {
   readonly ignored: boolean;
 }
 
+/** A running language server, speaking serialized JSON-RPC messages. */
+export interface PanelLanguageServerConnection {
+  /**
+   * Resolves once it runs, with options to merge into the `initialize` request. Stays pending
+   * if it fails to start, which `closed` reports.
+   */
+  readonly started: Promise<{ readonly initializationOptions?: Record<string, unknown> }>;
+  /** Resolves when it stops, for any reason, including `close`. Never rejects. */
+  readonly closed: Promise<{
+    readonly exitCode: number | null;
+    readonly stderr: string;
+    /** Why it could not start or was cut off, such as a missing install or a lost connection. */
+    readonly error: string | null;
+  }>;
+  /** Receives each message in order. */
+  onMessage(listener: (message: string) => void): () => void;
+  /** Queued until it starts; sent in order. */
+  send(message: string): void;
+  close(): void;
+}
+
 export interface PanelFile {
   readonly path: string;
   readonly contents: string;
@@ -98,6 +125,11 @@ export interface PanelHost<State = unknown> {
    * when the connection may not write files. It does not check for changes made since the read.
    */
   writeFile(relativePath: string, contents: string): Promise<void>;
+  /**
+   * Starts a language server in the thread's workspace, on the machine that holds it. Needs the
+   * connection's terminal permission, since a language server runs project code.
+   */
+  connectLanguageServer(language: LanguageServerLanguage): PanelLanguageServerConnection;
   /**
    * Opens an extension panel by id. With `state`, a panel that allows several tabs focuses the tab
    * whose state holds every top-level field of it, or opens one with it, and a single-tab panel

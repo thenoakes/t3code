@@ -186,7 +186,7 @@ const make = Effect.gen(function* () {
     if (!stdin) {
       return yield* new LanguageServerSessionNotFoundError({ sessionId: input.sessionId });
     }
-    yield* Queue.offer(stdin, encodeLanguageServerMessage(input.message));
+    yield* Queue.offerAll(stdin, input.messages.map(encodeLanguageServerMessage));
   });
 
   return LanguageServerManager.of({ connect, send });

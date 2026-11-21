@@ -26,6 +26,7 @@
     "@codingame/monaco-vscode-api": "37.6.1",
     "@codingame/monaco-vscode-configuration-service-override": "37.6.1",
     "@codingame/monaco-vscode-editor-api": "37.6.1",
+    "@codingame/monaco-vscode-extension-api": "37.6.1",
     "@codingame/monaco-vscode-textmate-service-override": "37.6.1",
     "@codingame/monaco-vscode-theme-defaults-default-extension": "37.6.1",
     "@codingame/monaco-vscode-typescript-basics-default-extension": "37.6.1",
@@ -98,6 +99,7 @@
     "unified": "catalog:",
     "use-sync-external-store": "^1.6.0",
     "vfile": "^6.0.3",
+    "vscode-languageclient": "10.1.2",
     "zustand": "^5.0.11"
   },
   "devDependencies": {

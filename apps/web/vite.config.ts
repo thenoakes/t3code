@@ -429,6 +429,9 @@ export default defineConfig(({ command }) => {
     resolve: {
       tsconfigPaths: true,
       dedupe: ["react", "react-dom"],
+      // vscode-languageclient imports the VS Code extension API as `vscode`, which
+      // monaco-vscode-api implements in the browser.
+      alias: { vscode: "@codingame/monaco-vscode-extension-api" },
     },
     experimental: {
       bundledDev,

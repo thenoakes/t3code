@@ -1083,6 +1083,9 @@ importers:
       '@codingame/monaco-vscode-editor-api':
         specifier: 37.6.1
         version: 37.6.1
+      '@codingame/monaco-vscode-extension-api':
+        specifier: 37.6.1
+        version: 37.6.1
       '@codingame/monaco-vscode-textmate-service-override':
         specifier: 37.6.1
         version: 37.6.1
@@ -1299,6 +1302,9 @@ importers:
       vfile:
         specifier: ^6.0.3
         version: 6.0.3
+      vscode-languageclient:
+        specifier: 10.1.2
+        version: 10.1.2
       zustand:
         specifier: ^5.0.11
         version: 5.0.14(@types/react@19.3.0)(react@19.3.0)(use-sync-external-store@1.6.0(react@19.3.0))

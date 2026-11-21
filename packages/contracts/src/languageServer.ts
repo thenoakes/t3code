@@ -17,7 +17,11 @@ export type LanguageServerConnectInput = typeof LanguageServerConnectInput.Type;
 
 export const LanguageServerSendInput = Schema.Struct({
   sessionId: TrimmedNonEmptyString,
-  message: LanguageServerMessage,
+  /**
+   * Written in order. A client keeps one send in flight and batches what queues meanwhile, so
+   * messages reach the language server in the order the client made them.
+   */
+  messages: Schema.Array(LanguageServerMessage).check(Schema.isMinLength(1)),
 });
 export type LanguageServerSendInput = typeof LanguageServerSendInput.Type;
 

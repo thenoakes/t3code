@@ -2,7 +2,7 @@ import { msg } from "gt-i18n";
 import { translatableMessage } from "../errors/translatable.ts";
 import type { QueryPersistence } from "./queryPersistence.ts";
 import { createCommandPermissions } from "./commandPermissions.ts";
-import { followStreamInEnvironment } from "./environmentStreams.ts";
+import { followStreamInEnvironment, runStreamInEnvironment } from "./environmentStreams.ts";
 import { reuseUnchanged } from "./serverConfigProjection.ts";
 export { runStreamInEnvironment, followStreamInEnvironment } from "./environmentStreams.ts";
 import {
@@ -30,12 +30,14 @@ import {
   type EnvironmentRpcFailure,
   type EnvironmentRpcStreamFailure,
   type EnvironmentRpcStreamValue,
+  type EnvironmentStreamCommandRpcTag,
   type EnvironmentSubscriptionRpcTag,
   type EnvironmentUnaryRpcTag,
   EnvironmentRpcUnavailableError,
   request,
   requestGuarded,
   RpcPermissionGuard,
+  runStreamGuarded,
   subscribe,
 } from "../rpc/client.ts";
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
@@ -1099,6 +1101,41 @@ export function createEnvironmentRpcSubscriptionAtomFamily<
           >)
         : options.transform(stream);
     },
+  });
+}
+
+/**
+ * Runs a streaming RPC as a command, handing each value to `onValue` as it arrives. The command
+ * ends with the stream; interrupting it, as `runAtomCommand`'s `signal` does, ends the stream.
+ */
+export function createEnvironmentRpcStreamCommand<
+  R,
+  ER,
+  TTag extends EnvironmentStreamCommandRpcTag,
+>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
+  options: { readonly label: string; readonly tag: TTag },
+) {
+  return createRuntimeCommand(runtime, {
+    label: options.label,
+    execute: (
+      command: {
+        readonly environmentId: EnvironmentIdType;
+        readonly input: EnvironmentRpcInput<TTag>;
+        readonly onValue: (value: EnvironmentRpcStreamValue<TTag>) => void;
+      },
+      registry,
+    ) =>
+      runStreamInEnvironment(
+        command.environmentId,
+        runStreamGuarded(options.tag, command.input),
+      ).pipe(
+        Stream.runForEach((value) => Effect.sync(() => command.onValue(value))),
+        Effect.provideService(RpcPermissionGuard, {
+          authorize: (id, method, payload) =>
+            createCommandPermissions(runtime, method).authorize(registry, id, payload),
+        }),
+      ),
   });
 }
 

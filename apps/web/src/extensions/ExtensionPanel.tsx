@@ -14,6 +14,7 @@ import { dispatchShortcutKeyDown, hasCommandForKeyDown } from "~/shortcuts/dispa
 import { useThreadShell } from "~/state/entities";
 import { getPanelExtension } from "./registry";
 import type { PanelHost, PanelThread } from "./types";
+import { connectWorkspaceLanguageServer } from "./languageServerConnection";
 import { listWorkspaceDirectory, readWorkspaceFile, writeWorkspaceFile } from "./workspaceFiles";
 
 /** Renders an extension surface, keeping a broken or missing extension inside its own tab. */
@@ -65,6 +66,8 @@ export function ExtensionPanel(props: {
       listWorkspaceDirectory(props.environmentId, props.workspaceRoot, relativePath),
     readFile: (relativePath) =>
       readWorkspaceFile(props.environmentId, props.workspaceRoot, relativePath),
+    connectLanguageServer: (language) =>
+      connectWorkspaceLanguageServer(props.environmentId, props.workspaceRoot, language),
     writeFile: (relativePath, contents) =>
       writeWorkspaceFile(props.environmentId, props.workspaceRoot, relativePath, contents),
     openPanel: (extensionId, state) =>
