@@ -1,12 +1,16 @@
+import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import type { EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
+import { matchesKeybindingShortcut, parseKeybindingShortcut } from "@t3tools/shared/keybindings";
 import { useGT } from "gt-react";
-import { Suspense } from "react";
+import { type KeyboardEvent, Suspense, useEffect, useRef } from "react";
 
 import { useComposerHandleContext } from "~/composerHandleContext";
 import { useRenderedAppearance } from "~/hooks/useTheme";
 import { RenderErrorBoundary } from "~/components/RenderErrorBoundary";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "~/components/ui/empty";
-import { type ExtensionSurface, useRightPanelStore } from "~/rightPanelStore";
+import { registerRightPanelCloseGuard } from "~/rightPanelCloseGuards";
+import { type ExtensionSurface, rightPanelHostRef, useRightPanelStore } from "~/rightPanelStore";
+import { dispatchShortcutKeyDown, hasCommandForKeyDown } from "~/shortcuts/dispatcher";
 import { useThreadShell } from "~/state/entities";
 import { getPanelExtension } from "./registry";
 import type { PanelHost, PanelThread } from "./types";
@@ -18,6 +22,7 @@ export function ExtensionPanel(props: {
   readonly threadRef: ScopedThreadRef;
   readonly environmentId: EnvironmentId;
   readonly workspaceRoot: string | undefined;
+  readonly workspaceRevision: string | null;
   readonly visible: boolean;
   readonly onClose: () => void;
 }) {
@@ -27,6 +32,17 @@ export function ExtensionPanel(props: {
   const composerRef = useComposerHandleContext();
   const shell = useThreadShell(threadRef);
   const appearance = useRenderedAppearance();
+  const closeWarningRef = useRef<string | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- registers this tab with the panel's close guards, an external registry, for as long as it is mounted
+  useEffect(
+    () =>
+      registerRightPanelCloseGuard(
+        scopedThreadKey(rightPanelHostRef(threadRef)),
+        surface.id,
+        () => closeWarningRef.current,
+      ),
+    [threadRef, surface.id],
+  );
   // The React Compiler memoizes these, so the panel only re-renders when they change.
   const thread: PanelThread | null =
     shell === null
@@ -51,11 +67,15 @@ export function ExtensionPanel(props: {
       readWorkspaceFile(props.environmentId, props.workspaceRoot, relativePath),
     writeFile: (relativePath, contents) =>
       writeWorkspaceFile(props.environmentId, props.workspaceRoot, relativePath, contents),
-    openPanel: (extensionId) =>
+    openPanel: (extensionId, state) =>
       useRightPanelStore.getState().openExtension(threadRef, extensionId, {
         multiple: getPanelExtension(extensionId)?.multiple,
+        ...(state === undefined ? {} : { state }),
       }),
     close: onClose,
+    setCloseWarning: (message) => {
+      closeWarningRef.current = message;
+    },
   };
 
   if (!extension) {
@@ -71,6 +91,24 @@ export function ExtensionPanel(props: {
     );
   }
   const Component = extension.component;
+  const ownShortcuts = (extension.ownShortcuts ?? []).flatMap(
+    (key) => parseKeybindingShortcut(key) ?? [],
+  );
+  // Widgets such as an embedded editor stop keys they handle, so app shortcuts are routed here,
+  // before the event reaches them, unless the panel owns the shortcut.
+  const routeAppShortcut = (event: KeyboardEvent) => {
+    const keydown = event.nativeEvent;
+    if (
+      !hasCommandForKeyDown(keydown) ||
+      ownShortcuts.some((shortcut) =>
+        matchesKeybindingShortcut(keydown, shortcut, navigator.platform),
+      )
+    ) {
+      return;
+    }
+    event.stopPropagation();
+    dispatchShortcutKeyDown(keydown);
+  };
   return (
     <RenderErrorBoundary
       resetKeys={[extension]}
@@ -88,16 +126,19 @@ export function ExtensionPanel(props: {
       }
     >
       <Suspense fallback={null}>
-        <Component
-          threadRef={threadRef}
-          environmentId={props.environmentId}
-          thread={thread}
-          workspaceRoot={props.workspaceRoot}
-          visible={props.visible}
-          appearance={appearance}
-          state={surface.state === undefined ? extension.initialState : surface.state}
-          host={host}
-        />
+        <div className="contents" onKeyDownCapture={routeAppShortcut}>
+          <Component
+            threadRef={threadRef}
+            environmentId={props.environmentId}
+            thread={thread}
+            workspaceRoot={props.workspaceRoot}
+            visible={props.visible}
+            appearance={appearance}
+            workspaceRevision={props.workspaceRevision}
+            state={surface.state === undefined ? extension.initialState : surface.state}
+            host={host}
+          />
+        </div>
       </Suspense>
     </RenderErrorBoundary>
   );

@@ -135,6 +135,8 @@ import {
 import { setMarkdownTaskChecked } from "@t3tools/shared/markdownTaskList";
 import { changeFileSaveSession, useFileSaveSession } from "./fileSaveSessions";
 import { revisionedQuery } from "~/state/revisionedQuery";
+import { panelExtensions } from "~/extensions/registry";
+import { useRightPanelStore } from "~/rightPanelStore";
 import {
   getOptimisticProjectFileQueryData,
   getProjectFileContents,
@@ -1679,6 +1681,27 @@ export default function FilePreviewPanel({
               {isCopied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
             </FileSurfaceAction>
           ) : null}
+          {relativePath !== null && attachment === undefined && !isHostFile && file.isFile
+            ? panelExtensions.flatMap((extension) => {
+                const handler = extension.fileHandler;
+                if (!handler || !(handler.matches?.(relativePath) ?? true)) return [];
+                const Icon = extension.icon;
+                return [
+                  <FileSurfaceAction
+                    key={extension.id}
+                    label={gt("Open in {title}", { title: extension.title })}
+                    onPress={() =>
+                      useRightPanelStore.getState().openExtension(threadRef, extension.id, {
+                        multiple: extension.multiple,
+                        state: handler.state(relativePath),
+                      })
+                    }
+                  >
+                    <Icon className="size-3.5" />
+                  </FileSurfaceAction>,
+                ];
+              })
+            : null}
           {canOpenInBrowser ? (
             <FileSurfaceAction
               label={gt("Open file in preview browser")}

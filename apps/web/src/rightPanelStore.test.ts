@@ -1,9 +1,10 @@
-import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { EnvironmentId, RunId, ThreadId } from "@t3tools/contracts";
-import { beforeEach, describe, expect, it } from "vite-plus/test";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { useClosedViewStore } from "./closedViewStore";
 import { linkedThreadTitle } from "./linkedThreadSurface";
+import { registerRightPanelCloseGuard } from "./rightPanelCloseGuards";
 import { reopenClosedView } from "./reopenClosedView";
 import {
   hostRightPanel,
@@ -623,6 +624,72 @@ describe("rightPanelStore", () => {
     expect(surfaces().find((surface) => surface.id === "ext:notes")).toMatchObject({
       state: { text: "remember" },
     });
+  });
+
+  it("opens an extension tab with a state, reusing the tab that already holds it", () => {
+    const store = useRightPanelStore.getState();
+    const panel = () =>
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    const open = (path: string) =>
+      store.openExtension(refA, "code-editor", { multiple: true, state: { path } });
+    open("a.ts");
+    open("b.ts");
+    open("a.ts");
+    expect(panel().surfaces).toEqual([
+      {
+        id: "ext:code-editor",
+        kind: "extension",
+        extensionId: "code-editor",
+        state: { path: "a.ts" },
+      },
+      {
+        id: "ext:code-editor:2",
+        kind: "extension",
+        extensionId: "code-editor",
+        state: { path: "b.ts" },
+      },
+    ]);
+    expect(panel().activeSurfaceId).toBe("ext:code-editor");
+
+    // A single-tab extension takes the new state in its one tab.
+    store.openExtension(refA, "notes", { state: { text: "one" } });
+    store.openExtension(refA, "notes", { state: { text: "two" } });
+    expect(panel().surfaces.filter((surface) => surface.id.startsWith("ext:notes"))).toEqual([
+      { id: "ext:notes", kind: "extension", extensionId: "notes", state: { text: "two" } },
+    ]);
+  });
+
+  it("asks before closing a tab with unsaved work, and keeps it when declined", () => {
+    const store = useRightPanelStore.getState();
+    const ids = () =>
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces.map(
+        (surface) => surface.id,
+      );
+    store.openExtension(refA, "code-editor", { multiple: true, state: { path: "a.ts" } });
+    store.openExtension(refA, "notes");
+    const unregister = registerRightPanelCloseGuard(
+      scopedThreadKey(refA),
+      "ext:code-editor",
+      () => "a.ts has unsaved changes.",
+    );
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("window", { confirm });
+    try {
+      store.closeAllSurfaces(refA);
+      expect(confirm).toHaveBeenCalledWith("a.ts has unsaved changes.");
+      expect(ids()).toEqual(["ext:code-editor", "ext:notes"]);
+
+      // Closing only an unguarded tab never asks.
+      store.closeSurface(refA, "ext:notes");
+      expect(confirm).toHaveBeenCalledTimes(1);
+
+      confirm.mockReturnValue(true);
+      store.closeSurface(refA, "ext:code-editor");
+      expect(ids()).toEqual([]);
+    } finally {
+      unregister();
+      vi.unstubAllGlobals();
+    }
   });
 
   it("keeps saved extension tabs, even uninstalled ones, and drops malformed ones", () => {

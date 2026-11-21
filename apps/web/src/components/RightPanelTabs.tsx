@@ -651,8 +651,12 @@ function surfaceTitle(
         surface,
         resolve(msg("Thread on {label}", { label: surface.label })),
       );
-    case "extension":
-      return getPanelExtension(surface.extensionId)?.title ?? surface.extensionId;
+    case "extension": {
+      const extension = getPanelExtension(surface.extensionId);
+      if (!extension) return surface.extensionId;
+      const state = surface.state === undefined ? extension.initialState : surface.state;
+      return extension.tabTitle?.(state) ?? extension.title;
+    }
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return resolve(msg("Browser"));

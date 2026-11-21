@@ -18,6 +18,19 @@ export interface PanelExtension<State = unknown> {
   readonly multiple?: boolean;
   /** Must survive `JSON.stringify`: it is persisted with the tab. */
   readonly initialState: State;
+  /** The tab's title for a given state, such as the open file's name. Defaults to `title`. */
+  readonly tabTitle?: (state: State) => string | null;
+  /** Offers "Open in <title>" on files in the Files tab, opening the panel with `state(path)`. */
+  readonly fileHandler?: {
+    readonly matches?: (relativePath: string) => boolean;
+    readonly state: (relativePath: string) => State;
+  };
+  /**
+   * App shortcuts, in keybinding syntax such as `"mod+f"`, that the panel handles itself while
+   * focus is inside it. Every other app shortcut runs the app command, even where the panel's
+   * own widgets, such as an embedded editor, would consume the key.
+   */
+  readonly ownShortcuts?: ReadonlyArray<string>;
   /** Wrap in `React.lazy` to keep a heavy panel out of the startup bundle. */
   readonly component: ComponentType<PanelProps<State>>;
 }
@@ -41,6 +54,11 @@ export interface PanelProps<State = unknown> {
   readonly visible: boolean;
   /** The app's rendered colour scheme, including a theme being previewed in settings. */
   readonly appearance: "light" | "dark";
+  /**
+   * Changes when the agent may have changed workspace files, so read again what the panel shows.
+   * Edits from outside T3 Code do not change it.
+   */
+  readonly workspaceRevision: string | null;
   readonly state: State;
   readonly host: PanelHost<State>;
 }
@@ -80,10 +98,18 @@ export interface PanelHost<State = unknown> {
    * when the connection may not write files. It does not check for changes made since the read.
    */
   writeFile(relativePath: string, contents: string): Promise<void>;
-  /** Opens another extension panel by id. */
-  openPanel(extensionId: string): void;
+  /**
+   * Opens an extension panel by id. With `state`, a panel that allows several tabs focuses the tab
+   * already holding that state or opens one with it, and a single-tab panel takes it.
+   */
+  openPanel(extensionId: string, state?: unknown): void;
   /** Closes this tab. */
   close(): void;
+  /**
+   * While set, closing this tab, alone or with others, asks the user first with this message.
+   * Set it while the panel holds unsaved work, and back to null once that work is saved.
+   */
+  setCloseWarning(message: string | null): void;
 }
 
 /** Identity at runtime; keeps a panel's `State` checked against its component. */

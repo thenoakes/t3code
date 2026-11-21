@@ -19,6 +19,7 @@ import {
 } from "./linkedThreadSurface";
 import type { ThreadPanelPresentation } from "./rightPanelLayout";
 import type { ChatFileAttachment } from "./types";
+import { confirmRightPanelClose } from "./rightPanelCloseGuards";
 
 const RIGHT_PANEL_KINDS = [
   "diff",
@@ -204,13 +205,18 @@ interface RightPanelStoreState {
   openThread: (ref: ScopedThreadRef, threadId: ThreadId) => void;
   openLinkedThread: (ref: ScopedThreadRef, target: LinkedThreadTarget) => void;
   /**
-   * `multiple` opens another tab; otherwise an open tab of the extension is focused. `surface`
+   * Without `multiple`, an open tab of the extension is focused, taking `state` when given. With
+   * it, a tab already holding the same `state` is focused, or else another tab opens. `surface`
    * restores a closed tab as it was.
    */
   openExtension: (
     ref: ScopedThreadRef,
     extensionId: string,
-    options?: { multiple?: boolean | undefined; surface?: ExtensionSurface },
+    options?: {
+      multiple?: boolean | undefined;
+      state?: unknown;
+      surface?: ExtensionSurface;
+    },
   ) => void;
   setExtensionState: (ref: ScopedThreadRef, surfaceId: string, state: unknown) => void;
   /** Records the title the linked environment gave, so the tab and a reopened one show it. */
@@ -607,9 +613,30 @@ const activated = (current: ThreadRightPanelState, surfaceId: string): ThreadRig
 
 const closeAction = (
   state: RightPanelStoreState,
-  threadKey: string,
+  guestKey: string,
   updater: (current: ThreadRightPanelState) => ThreadRightPanelState,
-): Partial<RightPanelStoreState> => userAction(state, threadKey, updater, true);
+): Partial<RightPanelStoreState> => {
+  const host = panelHosts.get(guestKey);
+  const threadKey = host === undefined ? guestKey : scopedThreadKey(host);
+  let declined = false;
+  const result = userAction(
+    state,
+    guestKey,
+    (current) => {
+      const next = updater(current);
+      const removed = current.surfaces
+        .filter((surface) => !next.surfaces.some((entry) => entry.id === surface.id))
+        .map((surface) => surface.id);
+      if (removed.length > 0 && !confirmRightPanelClose(threadKey, removed)) {
+        declined = true;
+        return current;
+      }
+      return next;
+    },
+    true,
+  );
+  return declined ? {} : result;
+};
 
 function normalizeRevealLine(line: number | undefined): number | null {
   if (line === undefined || !Number.isFinite(line)) return null;
@@ -935,16 +962,35 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
         set((state) =>
           userAction(state, scopedThreadKey(ref), (current) => {
             if (options.surface) return upsertSurface(current, options.surface);
-            const ids = new Set(current.surfaces.map((surface) => surface.id));
-            if (!options.multiple) {
-              const existing = current.surfaces.find(
-                (surface) => surface.kind === "extension" && surface.extensionId === extensionId,
-              );
-              if (existing) return upsertSurface(current, existing);
+            const hasState = options.state !== undefined;
+            // States are JSON, so equal serializations are the same tab content.
+            const stateKey = hasState ? JSON.stringify(options.state) : undefined;
+            const existing = current.surfaces.find(
+              (surface): surface is ExtensionSurface =>
+                surface.kind === "extension" &&
+                surface.extensionId === extensionId &&
+                (!options.multiple || (hasState && JSON.stringify(surface.state) === stateKey)),
+            );
+            if (existing) {
+              const focused = upsertSurface(current, existing);
+              return hasState && !options.multiple
+                ? {
+                    ...focused,
+                    surfaces: focused.surfaces.map((surface) =>
+                      surface.id === existing.id ? { ...existing, state: options.state } : surface,
+                    ),
+                  }
+                : focused;
             }
+            const ids = new Set(current.surfaces.map((surface) => surface.id));
             let id: ExtensionSurface["id"] = `ext:${extensionId}`;
             for (let index = 2; ids.has(id); index += 1) id = `ext:${extensionId}:${index}`;
-            return upsertSurface(current, { id, kind: "extension", extensionId });
+            return upsertSurface(current, {
+              id,
+              kind: "extension",
+              extensionId,
+              ...(hasState ? { state: options.state } : {}),
+            });
           }),
         ),
       setExtensionState: (ref, surfaceId, extensionState) =>

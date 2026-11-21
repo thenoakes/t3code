@@ -28,6 +28,7 @@ export default definePanelExtension<{ count: number }>({
 Working examples:
 
 - `panels/notes` keeps scratch notes per thread and sends them to the composer.
+- `panels/code-editor` edits a file in Monaco, following changes the agent makes to it.
 - `panels/claude-config` reads the workspace to list Claude Code files: instructions, skills,
   agents, commands, settings and hooks, and MCP servers.
 
@@ -38,17 +39,23 @@ under `~/components/ui`. If a panel needs something the host does not offer, add
 `PanelHost` rather than importing app stores, so panels survive upstream refactors.
 
 - `PanelExtension`: the extension's id, title, icon, and optional add-menu shortcut letter.
-  Set `multiple` if each open should make a new tab.
+  Set `multiple` if each open should make a new tab. Optional extras:
+  - `tabTitle` names a tab from its state, such as the open file.
+  - `fileHandler` adds "Open in <title>" to the Files tab header.
+  - `ownShortcuts` lists app shortcuts the panel keeps while focused. Every other app shortcut
+    runs the app command, even inside a widget such as an embedded editor that would consume it.
 - `PanelProps`: what the panel receives: the thread, its environment, the workspace root,
-  `visible`, the tab's `state`, and `host`.
+  `visible`, `appearance`, `workspaceRevision` (changes when the agent may have edited files),
+  the tab's `state`, and `host`.
 - `PanelHost`: what the panel can ask of the app:
   - `setState` saves the tab's state.
   - `insertIntoComposer` adds text to the composer.
   - `openFile` opens a workspace file.
-  - `listDirectory` and `readFile` read the thread's workspace. They take workspace-relative paths
+  - `listDirectory`, `readFile` and `writeFile` use the thread's workspace. They take workspace-relative paths
     only and reject anything that leaves the workspace, such as `~/.claude`.
-  - `openPanel` opens another extension panel.
+  - `openPanel` opens an extension panel, optionally with a starting state.
   - `close` closes the tab.
+  - `setCloseWarning` makes closing the tab ask first, while the panel holds unsaved work.
 
 ## Rules
 

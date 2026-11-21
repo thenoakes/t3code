@@ -260,6 +260,7 @@ export function RightPanelSurfaceContent(props: {
           threadRef={threadRef}
           environmentId={props.environmentId}
           workspaceRoot={props.files.workspaceRoot}
+          workspaceRevision={props.workspaceMutationId}
           visible={visible && props.activeSurfaceId === surface.id}
           onClose={() => onCloseSurface(surface)}
         />

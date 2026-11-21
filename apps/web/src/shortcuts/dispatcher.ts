@@ -92,6 +92,14 @@ export function hasCommandForKeyDown(event: KeyboardEvent): boolean {
   );
 }
 
+/**
+ * Runs a keydown through the bubble-phase commands, for a container that stops the event before a
+ * widget inside it can consume a key the app binds.
+ */
+export function dispatchShortcutKeyDown(event: KeyboardEvent): void {
+  dispatchKeyDown(event);
+}
+
 function runScopes(scopes: readonly CommandScope[], event: KeyboardEvent): boolean {
   for (let index = scopes.length - 1; index >= 0; index -= 1) {
     if (event.defaultPrevented) return true;
