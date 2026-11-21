@@ -6,6 +6,7 @@ import { Button } from "~/components/ui/button";
 import type { PanelProps } from "../../types";
 import type { CodeEditorState } from "./index";
 import { startMonaco } from "./monaco";
+import { nextUnsavedState, restoreUnsaved } from "./unsaved";
 
 type Status =
   | { readonly kind: "loading" }
@@ -17,6 +18,9 @@ type Status =
 type Conflict =
   | { readonly kind: "changed"; readonly diskText: string }
   | { readonly kind: "deleted" };
+
+// Edits are written to the tab's state once typing pauses, not on every keystroke.
+const KEEP_UNSAVED_DELAY_MS = 400;
 
 const errorMessage = (cause: unknown) => (cause instanceof Error ? cause.message : String(cause));
 
@@ -45,8 +49,20 @@ export default function CodeEditorPanel({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<Conflict | null>(null);
+  const keepUnsavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const editorText = () => appRef.current?.getTextModels().modified?.getValue();
+
+  /** Writes the editor's unsaved edits to the tab's state, or clears them once there are none. */
+  const keepUnsaved = useEffectEvent((filePath: string) => {
+    if (keepUnsavedTimerRef.current !== null) clearTimeout(keepUnsavedTimerRef.current);
+    keepUnsavedTimerRef.current = null;
+    const text = editorText();
+    const saved = savedTextRef.current;
+    if (text === undefined || saved === null) return;
+    const next = nextUnsavedState(state, filePath, text, saved);
+    if (next !== null) host.setState(next);
+  });
 
   /** Replaces the editor's text with the file's, as one undoable edit. */
   const applyDiskText = (text: string) => {
@@ -59,6 +75,7 @@ export default function CodeEditorPanel({
     editor.pushUndoStop();
     editor.executeEdits("t3code.disk", [{ range: model.getFullModelRange(), text }]);
     editor.pushUndoStop();
+    if (path !== null) keepUnsaved(path);
   };
 
   /** Reads the file again and takes the disk's copy, unless that would drop unsaved edits. */
@@ -101,6 +118,7 @@ export default function CodeEditorPanel({
           savedTextRef.current = text;
           setConflict(null);
           setDirty(editorText() !== text);
+          keepUnsaved(path);
         });
       })
       .catch((cause: unknown) => setSaveError(errorMessage(cause)))
@@ -110,6 +128,7 @@ export default function CodeEditorPanel({
   const open = useEffectEvent((container: HTMLDivElement, filePath: string, root: string) => {
     let cancelled = false;
     let app: EditorApp | null = null;
+    let contentListener: { dispose(): void } | undefined;
     void (async () => {
       try {
         const [file] = await Promise.all([host.readFile(filePath), startMonaco(appearance)]);
@@ -118,8 +137,13 @@ export default function CodeEditorPanel({
           setStatus({ kind: "missing" });
           return;
         }
+        // Edits kept from an earlier mount come back; if the file changed since they began, the
+        // conflict banner asks which copy to keep.
+        const restored = restoreUnsaved(state, filePath, file.contents);
         app = new EditorApp({
-          codeResources: { modified: { text: file.contents, uri: fileUri(root, filePath) } },
+          codeResources: {
+            modified: { text: restored.text, uri: fileUri(root, filePath) },
+          },
           readOnly: file.truncated,
           editorOptions: { readOnly: file.truncated },
         });
@@ -127,12 +151,26 @@ export default function CodeEditorPanel({
         if (cancelled) return;
         appRef.current = app;
         savedTextRef.current = file.contents;
-        setDirty(false);
-        setConflict(null);
-        app.registerOnTextChangedCallback(({ modified }) => {
-          setDirty(modified !== undefined && modified !== savedTextRef.current);
+        setDirty(restored.dirty);
+        setConflict(
+          restored.conflictDiskText === null
+            ? null
+            : { kind: "changed", diskText: restored.conflictDiskText },
+        );
+        // Drops kept edits the file now holds.
+        if (!restored.dirty) keepUnsaved(filePath);
+        const editor = app.getEditor();
+        // EditorApp's own text callback only attaches to models during start(), so listen to the
+        // editor directly.
+        contentListener = editor?.onDidChangeModelContent(() => {
+          setDirty(editor.getValue() !== savedTextRef.current);
+          if (keepUnsavedTimerRef.current !== null) clearTimeout(keepUnsavedTimerRef.current);
+          keepUnsavedTimerRef.current = setTimeout(
+            () => keepUnsaved(filePath),
+            KEEP_UNSAVED_DELAY_MS,
+          );
         });
-        app.getEditor()?.addAction({
+        editor?.addAction({
           id: "t3code.save",
           label: "Save",
           keybindings: [KeyMod.CtrlCmd | KeyCode.KeyS],
@@ -149,6 +187,9 @@ export default function CodeEditorPanel({
     })();
     return () => {
       cancelled = true;
+      // Keep the latest edits before the editor goes, as on a thread switch.
+      if (app !== null) keepUnsaved(filePath);
+      contentListener?.dispose();
       appRef.current = null;
       void app?.dispose();
     };
@@ -173,7 +214,10 @@ export default function CodeEditorPanel({
       return;
     }
     host.setCloseWarning(`${path ?? "This file"} has unsaved changes. Close it anyway?`);
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (path !== null) keepUnsaved(path);
+      event.preventDefault();
+    };
     window.addEventListener("beforeunload", warnBeforeUnload);
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [dirty, path, host]);
@@ -234,6 +278,7 @@ export default function CodeEditorPanel({
               savedTextRef.current = conflict.diskText;
               setConflict(null);
               setDirty(editorText() !== conflict.diskText);
+              if (path !== null) keepUnsaved(path);
             }}
           >
             Keep mine

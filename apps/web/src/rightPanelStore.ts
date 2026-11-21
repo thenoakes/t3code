@@ -206,8 +206,8 @@ interface RightPanelStoreState {
   openLinkedThread: (ref: ScopedThreadRef, target: LinkedThreadTarget) => void;
   /**
    * Without `multiple`, an open tab of the extension is focused, taking `state` when given. With
-   * it, a tab already holding the same `state` is focused, or else another tab opens. `surface`
-   * restores a closed tab as it was.
+   * it, a tab whose state holds every field of `state` is focused, or else another tab opens.
+   * `surface` restores a closed tab as it was.
    */
   openExtension: (
     ref: ScopedThreadRef,
@@ -445,6 +445,26 @@ const withoutReveal = (surface: RightPanelSurface): RightPanelSurface => {
   const { revealUrl: _pending, ...rest } = surface;
   return rest;
 };
+
+/**
+ * Whether a tab's state holds every top-level field of `requested`, so a file's tab still matches
+ * once it adds fields of its own, such as unsaved edits. States are JSON, compared by value.
+ */
+function extensionStateIncludes(state: unknown, requested: unknown): boolean {
+  if (
+    typeof state !== "object" ||
+    state === null ||
+    typeof requested !== "object" ||
+    requested === null ||
+    Array.isArray(requested)
+  ) {
+    return JSON.stringify(state) === JSON.stringify(requested);
+  }
+  return Object.entries(requested).every(
+    ([key, value]) =>
+      JSON.stringify((state as Record<string, unknown>)[key]) === JSON.stringify(value),
+  );
+}
 
 const upsertSurface = (
   current: ThreadRightPanelState,
@@ -963,13 +983,12 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
           userAction(state, scopedThreadKey(ref), (current) => {
             if (options.surface) return upsertSurface(current, options.surface);
             const hasState = options.state !== undefined;
-            // States are JSON, so equal serializations are the same tab content.
-            const stateKey = hasState ? JSON.stringify(options.state) : undefined;
             const existing = current.surfaces.find(
               (surface): surface is ExtensionSurface =>
                 surface.kind === "extension" &&
                 surface.extensionId === extensionId &&
-                (!options.multiple || (hasState && JSON.stringify(surface.state) === stateKey)),
+                (!options.multiple ||
+                  (hasState && extensionStateIncludes(surface.state, options.state))),
             );
             if (existing) {
               const focused = upsertSurface(current, existing);

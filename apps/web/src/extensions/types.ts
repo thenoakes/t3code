@@ -100,7 +100,8 @@ export interface PanelHost<State = unknown> {
   writeFile(relativePath: string, contents: string): Promise<void>;
   /**
    * Opens an extension panel by id. With `state`, a panel that allows several tabs focuses the tab
-   * already holding that state or opens one with it, and a single-tab panel takes it.
+   * whose state holds every top-level field of it, or opens one with it, and a single-tab panel
+   * takes it.
    */
   openPanel(extensionId: string, state?: unknown): void;
   /** Closes this tab. */

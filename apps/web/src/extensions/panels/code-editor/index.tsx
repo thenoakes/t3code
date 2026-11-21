@@ -6,6 +6,11 @@ import { definePanelExtension } from "../../types";
 export interface CodeEditorState {
   /** Workspace-relative path of the open file; null until one is chosen. */
   readonly path: string | null;
+  /**
+   * Edits not yet saved, kept with the tab so they survive the editor unmounting on a thread
+   * switch or reload. `baseHash` identifies the file text they were made against.
+   */
+  readonly unsaved?: { readonly text: string; readonly baseHash: string };
 }
 
 export default definePanelExtension<CodeEditorState>({

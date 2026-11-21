@@ -634,13 +634,15 @@ describe("rightPanelStore", () => {
       store.openExtension(refA, "code-editor", { multiple: true, state: { path } });
     open("a.ts");
     open("b.ts");
+    // A tab that has since added fields of its own still holds the requested ones.
+    store.setExtensionState(refA, "ext:code-editor", { path: "a.ts", draft: { text: "x" } });
     open("a.ts");
     expect(panel().surfaces).toEqual([
       {
         id: "ext:code-editor",
         kind: "extension",
         extensionId: "code-editor",
-        state: { path: "a.ts" },
+        state: { path: "a.ts", draft: { text: "x" } },
       },
       {
         id: "ext:code-editor:2",
