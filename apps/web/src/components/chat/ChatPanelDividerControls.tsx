@@ -59,11 +59,12 @@ export function ChatPanelDividerControls(props: {
         onPress={() => props.onFullscreen("chat")}
       />
       <div aria-hidden className="h-px w-4 bg-border" />
+      {/* From most chat to most panel, between the two fullscreens. */}
       <DividerButton
-        label={gt("Narrow chat")}
-        icon={PanelLeftIcon}
-        active={preset === "chat-min"}
-        onPress={() => props.onPreset("chat-min")}
+        label={gt("Narrow panel")}
+        icon={PanelRightIcon}
+        active={preset === "panel-min"}
+        onPress={() => props.onPreset("panel-min")}
       />
       <DividerButton
         label={gt("Even split")}
@@ -72,10 +73,10 @@ export function ChatPanelDividerControls(props: {
         onPress={() => props.onPreset("even")}
       />
       <DividerButton
-        label={gt("Narrow panel")}
-        icon={PanelRightIcon}
-        active={preset === "panel-min"}
-        onPress={() => props.onPreset("panel-min")}
+        label={gt("Narrow chat")}
+        icon={PanelLeftIcon}
+        active={preset === "chat-min"}
+        onPress={() => props.onPreset("chat-min")}
       />
       <div aria-hidden className="h-px w-4 bg-border" />
       <DividerButton
