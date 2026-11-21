@@ -34,6 +34,14 @@ export interface PanelLayoutControlsProps {
   rightPanelOpen: boolean;
   rightPanelShortcutLabel: string | null;
   rightPanelUnavailableLabel?: string;
+  /** Replaces "Toggle right panel" where the control does something narrower. */
+  rightPanelLabel?: string;
+  /** Lets the chat fill the row; absent where it cannot, as in a narrow window. */
+  chatFullscreen?: {
+    readonly active: boolean;
+    readonly shortcutLabel: string | null;
+    readonly onToggle: () => void;
+  };
   onToggleTerminal: () => void;
   onToggleThreadPanel: () => void;
   onToggleRightPanel: () => void;
@@ -54,11 +62,14 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
   rightPanelOpen,
   rightPanelShortcutLabel,
   rightPanelUnavailableLabel,
+  rightPanelLabel,
+  chatFullscreen,
   onToggleTerminal,
   onToggleThreadPanel,
   onToggleRightPanel,
 }: PanelLayoutControlsProps) {
   const gt = useGT();
+  const rightPanelControlLabel = rightPanelLabel ?? gt("Toggle right panel");
   const threadPanelToggle = (
     <Toggle
       className="relative shrink-0 [-webkit-app-region:no-drag]"
@@ -93,6 +104,13 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
       className="flex h-full shrink-0 items-center gap-1 [-webkit-app-region:no-drag]"
       data-panel-layout-controls
     >
+      {chatFullscreen ? (
+        <ChatFullscreenControl
+          active={chatFullscreen.active}
+          shortcutLabel={chatFullscreen.shortcutLabel}
+          onToggle={chatFullscreen.onToggle}
+        />
+      ) : null}
       {showThreadPanelControl ? threadPanelControl : null}
       {showTerminalControl ? (
         <Tooltip>
@@ -125,7 +143,7 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
               className="shrink-0 [-webkit-app-region:no-drag]"
               pressed={rightPanelOpen}
               onPressedChange={onToggleRightPanel}
-              aria-label={gt("Toggle right panel")}
+              aria-label={rightPanelControlLabel}
               data-right-panel-toggle
               variant="ghost"
               size="sm"
@@ -137,8 +155,11 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
           <TooltipPopup side="bottom">
             {rightPanelAvailable
               ? rightPanelShortcutLabel
-                ? gt("Toggle right panel ({shortcut})", { shortcut: rightPanelShortcutLabel })
-                : gt("Toggle right panel")
+                ? gt("{label} ({shortcut})", {
+                    label: rightPanelControlLabel,
+                    shortcut: rightPanelShortcutLabel,
+                  })
+                : rightPanelControlLabel
               : (rightPanelUnavailableLabel ?? gt("Right panel is unavailable"))}
           </TooltipPopup>
         </Tooltip>
@@ -150,12 +171,15 @@ export const PanelLayoutControls = memo(function PanelLayoutControls({
 export const RightPanelMaximizeControl = memo(function RightPanelMaximizeControl({
   maximized,
   onToggle,
+  restoreLabel,
 }: {
   maximized: boolean;
   onToggle: () => void;
+  /** Replaces "Exit panel fullscreen", as in a narrow window where it shows the chat. */
+  restoreLabel?: string | undefined;
 }) {
   const gt = useGT();
-  const label = maximized ? gt("Restore panel size") : gt("Maximize panel");
+  const label = maximized ? (restoreLabel ?? gt("Exit panel fullscreen")) : gt("Fullscreen panel");
   return (
     <Tooltip>
       <TooltipTrigger
@@ -177,6 +201,44 @@ export const RightPanelMaximizeControl = memo(function RightPanelMaximizeControl
         }
       />
       <TooltipPopup side="bottom">{label}</TooltipPopup>
+    </Tooltip>
+  );
+});
+
+/** Fills the row with the chat, as `RightPanelMaximizeControl` does with the panel. */
+const ChatFullscreenControl = memo(function ChatFullscreenControl(props: {
+  readonly active: boolean;
+  readonly shortcutLabel: string | null;
+  readonly onToggle: () => void;
+}) {
+  const gt = useGT();
+  const label = props.active ? gt("Exit chat fullscreen") : gt("Fullscreen chat");
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Toggle
+            className="shrink-0 [-webkit-app-region:no-drag]"
+            pressed={props.active}
+            onPressedChange={props.onToggle}
+            aria-label={label}
+            variant="ghost"
+            size="sm"
+            data-chat-fullscreen-toggle
+          >
+            {props.active ? (
+              <Minimize2Icon className="size-4" />
+            ) : (
+              <Maximize2Icon className="size-4" />
+            )}
+          </Toggle>
+        }
+      />
+      <TooltipPopup side="bottom">
+        {props.shortcutLabel
+          ? gt("{label} ({shortcut})", { label, shortcut: props.shortcutLabel })
+          : label}
+      </TooltipPopup>
     </Tooltip>
   );
 });
@@ -204,6 +266,7 @@ export function WorkspaceTitlebarControls(props: {
   readonly animationsActive: boolean;
   readonly maximized: boolean;
   readonly onToggleMaximized: () => void;
+  readonly restoreLabel?: string;
   readonly children: ReactNode;
 }) {
   const { rightPanelOpen, maximized } = props;
@@ -256,6 +319,7 @@ export function WorkspaceTitlebarControls(props: {
           <RightPanelMaximizeControl
             maximized={props.maximized}
             onToggle={props.onToggleMaximized}
+            restoreLabel={props.restoreLabel}
           />
         </span>
       ) : null}

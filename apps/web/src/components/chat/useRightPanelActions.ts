@@ -40,6 +40,7 @@ import { previewEnvironment } from "../../state/preview";
 import { useAtomCommand } from "../../state/use-atom-command";
 import type { ChatShortcutCommands } from "./useChatShortcuts";
 import { getPanelExtension } from "../../extensions/registry";
+import type { ChatPanelPreset } from "../../chatPanelLayout";
 
 interface RightPanelActionsInput {
   readonly activeThreadRef: ScopedThreadRef | null;
@@ -60,8 +61,10 @@ interface RightPanelActionsInput {
   readonly diffOpen: boolean;
   readonly previewPanelOpen: boolean;
   readonly rightPanelOpen: boolean;
-  readonly canMaximizeRightPanel: boolean;
   readonly rightPanelMaximized: boolean;
+  /** One side shows at a time, switched rather than split. */
+  readonly narrowLayout: boolean;
+  readonly chatFullscreen: boolean;
   readonly supportsPullRequests: boolean;
   readonly pullRequestsSurfaceAvailable: boolean;
   readonly gitCwd: string | null;
@@ -93,8 +96,9 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     diffOpen,
     previewPanelOpen,
     rightPanelOpen,
-    canMaximizeRightPanel,
     rightPanelMaximized,
+    narrowLayout,
+    chatFullscreen,
     supportsPullRequests,
     pullRequestsSurfaceAvailable,
     gitCwd,
@@ -198,7 +202,8 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
           deviceStateLoaded ? deviceState : null,
         );
       }
-      useRightPanelStore.getState().setMaximized(activeThreadRef, false);
+      // Chat threads always show the panel; a narrow window goes back to the chat.
+      if (narrowLayout) useRightPanelStore.getState().setNarrowPane(activeThreadRef, "chat");
       useRightPanelStore.getState().close(activeThreadRef);
     }
   };
@@ -246,14 +251,19 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     }
   };
   const activateRightPanelSurfaceStable = useStableCallback(activateRightPanelSurface);
+  // The panel no longer collapses: this switches sides in a narrow window and leaves chat
+  // fullscreen otherwise.
   const toggleRightPanel = () => {
     if (!activeThreadRef) return;
-    if (rightPanelOpen) {
-      closePreviewPanel();
+    const store = useRightPanelStore.getState();
+    if (narrowLayout) {
+      store.setNarrowPane(activeThreadRef, rightPanelOpen ? "chat" : "panel");
+    } else if (chatFullscreen) {
+      store.setFullscreen(activeThreadRef, null);
+    } else {
       return;
     }
-    useRightPanelStore.getState().toggleVisibility(activeThreadRef);
-    focusActivePanelTerminal(activeThreadRef);
+    if (!rightPanelOpen) focusActivePanelTerminal(activeThreadRef);
   };
   const toggleRightPanelStable = useStableCallback(toggleRightPanel);
   const toggleThreadPanel = () => {
@@ -273,10 +283,27 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
   };
   const toggleThreadPanelStable = useStableCallback(toggleThreadPanel);
   const toggleRightPanelMaximized = () => {
-    if (!canMaximizeRightPanel || !activeThreadRef) return;
+    if (!activeThreadRef) return;
+    const store = useRightPanelStore.getState();
+    // In a narrow window the panel always fills the row; leaving it shows the chat.
+    if (narrowLayout) {
+      store.setNarrowPane(activeThreadRef, rightPanelOpen ? "chat" : "panel");
+      return;
+    }
     if (!rightPanelMaximized) requestWorkspaceFocus({ area: "panel" });
-    useRightPanelStore.getState().setMaximized(activeThreadRef, !rightPanelMaximized);
+    store.setFullscreen(activeThreadRef, rightPanelMaximized ? null : "panel");
   };
+  const toggleChatFullscreen = () => {
+    if (!activeThreadRef || narrowLayout || embedded) return;
+    if (!chatFullscreen) requestWorkspaceContentFocus();
+    useRightPanelStore.getState().setFullscreen(activeThreadRef, chatFullscreen ? null : "chat");
+  };
+  const toggleChatFullscreenStable = useStableCallback(toggleChatFullscreen);
+  const setLayoutPreset = (preset: ChatPanelPreset) => {
+    if (!activeThreadRef || embedded) return;
+    useRightPanelStore.getState().setLayout(activeThreadRef, { kind: "preset", preset });
+  };
+  const setLayoutPresetStable = useStableCallback(setLayoutPreset);
   const toggleRightPanelMaximizedStable = useStableCallback(toggleRightPanelMaximized);
   const moveRightPanelSurface = (surfaceId: string, toIndex: number) => {
     if (activeThreadRef)
@@ -345,6 +372,12 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     "rightPanel.toggleMaximized": ({ event }) => {
       if (!event.repeat) toggleRightPanelMaximized();
     },
+    "layout.toggleChatFullscreen": ({ event }) => {
+      if (!event.repeat) toggleChatFullscreen();
+    },
+    "layout.chatMinimum": () => setLayoutPreset("chat-min"),
+    "layout.even": () => setLayoutPreset("even"),
+    "layout.panelMinimum": () => setLayoutPreset("panel-min"),
     "threadPanel.toggle": () => toggleThreadPanel(),
     "rightPanel.close": ({ event }) => {
       if (!activeRightPanelSurface) return false;
@@ -374,6 +407,8 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     openChangesFromThreadPanelStable,
     openFileSurfaceStable,
     toggleRightPanelMaximizedStable,
+    setLayoutPresetStable,
+    toggleChatFullscreenStable,
     toggleRightPanelStable,
     toggleThreadPanelStable,
   };

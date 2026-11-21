@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 import { type ResizableWidthHandlers, useResizableWidth } from "./useResizableWidth";
 import { observeResize } from "../lib/observeResize";
@@ -8,6 +8,9 @@ export interface PreviewPanelInlineSize {
   readonly handlers: ResizableWidthHandlers;
   /** Ref-callback body for the panel host: measures the row the panel shares. */
   readonly observeRow: (host: HTMLElement) => () => void;
+  readonly onDividerDoubleClick?: () => void;
+  /** Shown on the divider while it is hovered or focused, such as layout presets. */
+  readonly dividerControls?: ReactNode;
 }
 
 const PREVIEW_PANEL_WIDTH_STORAGE_KEY = "t3code:preview-panel-width";

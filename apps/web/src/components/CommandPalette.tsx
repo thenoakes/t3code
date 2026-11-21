@@ -61,25 +61,30 @@ import {
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeftIcon,
+  ArrowLeftToLineIcon,
+  ArrowRightToLineIcon,
   BugIcon,
   ChartNoAxesColumnIcon,
   CheckIcon,
   ChevronRightIcon,
+  Columns2Icon,
   CornerLeftUpIcon,
   FileSearchIcon,
   FolderGit2Icon,
   FolderIcon,
   FolderPlusIcon,
-  MessageSquareDashedIcon,
   LinkIcon,
+  MessageSquareDashedIcon,
   MessageSquareIcon,
-  PaletteIcon,
-  RotateCcwIcon,
-  SettingsIcon,
   MonitorIcon,
+  PaletteIcon,
+  PanelLeftIcon,
+  PanelRightIcon,
   PinIcon,
   PinOffIcon,
   PlugIcon,
+  RotateCcwIcon,
+  SettingsIcon,
   SquarePenIcon,
   TextSearchIcon,
   UserPlusIcon,
@@ -176,6 +181,7 @@ import {
   useCommandPaletteStore,
 } from "../commandPaletteStore";
 import {
+  selectThreadRightPanelState,
   PULL_REQUESTS_PANEL_REF,
   selectActiveRightPanel,
   useRightPanelStore,
@@ -1552,6 +1558,62 @@ function OpenCommandPaletteDialog(props: {
         },
       });
     }
+    const layoutPresets = [
+      {
+        preset: "chat-min",
+        title: gt("Layout: narrow chat"),
+        icon: PanelLeftIcon,
+        shortcutCommand: "layout.chatMinimum",
+      },
+      {
+        preset: "even",
+        title: gt("Layout: even split"),
+        icon: Columns2Icon,
+        shortcutCommand: "layout.even",
+      },
+      {
+        preset: "panel-min",
+        title: gt("Layout: narrow panel"),
+        icon: PanelRightIcon,
+        shortcutCommand: "layout.panelMinimum",
+      },
+    ] as const;
+    for (const { preset, title, icon: Icon, shortcutCommand } of layoutPresets) {
+      actionItems.push({
+        kind: "action",
+        value: `action:layout:${preset}`,
+        searchTerms: ["layout", "split", "panel", "chat", "width"],
+        title,
+        icon: <Icon className={ITEM_ICON_CLASS} />,
+        shortcutCommand,
+        run: async () => {
+          useRightPanelStore.getState().setLayout(threadRef, { kind: "preset", preset });
+        },
+      });
+    }
+    const toggleFullscreen = (side: "chat" | "panel") => {
+      const store = useRightPanelStore.getState();
+      const current = selectThreadRightPanelState(store.byThreadKey, threadRef).fullscreen;
+      store.setFullscreen(threadRef, current === side ? null : side);
+    };
+    actionItems.push({
+      kind: "action",
+      value: "action:layout:fullscreen-chat",
+      searchTerms: ["layout", "fullscreen", "maximize", "chat"],
+      title: gt("Toggle chat fullscreen"),
+      icon: <ArrowRightToLineIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "layout.toggleChatFullscreen",
+      run: async () => toggleFullscreen("chat"),
+    });
+    actionItems.push({
+      kind: "action",
+      value: "action:layout:fullscreen-panel",
+      searchTerms: ["layout", "fullscreen", "maximize", "panel"],
+      title: gt("Toggle panel fullscreen"),
+      icon: <ArrowLeftToLineIcon className={ITEM_ICON_CLASS} />,
+      shortcutCommand: "rightPanel.toggleMaximized",
+      run: async () => toggleFullscreen("panel"),
+    });
   }
 
   if (activeThread !== null && canShareActiveThreadWithGuest) {

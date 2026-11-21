@@ -20,6 +20,11 @@ import {
 import type { ThreadPanelPresentation } from "./rightPanelLayout";
 import type { ChatFileAttachment } from "./types";
 import { confirmRightPanelClose } from "./rightPanelCloseGuards";
+import {
+  type ChatPanelFullscreen,
+  type ChatPanelLayout,
+  isChatPanelLayout,
+} from "./chatPanelLayout";
 
 const RIGHT_PANEL_KINDS = [
   "diff",
@@ -162,11 +167,17 @@ const isPullRequestsPanelKey = (threadKey: string) =>
   threadKey.endsWith(":pull-requests-panel") || threadKey.endsWith(":issues-panel");
 
 export interface ThreadRightPanelState {
+  /** Chat threads always show the panel; the Pull requests and Issues pages can collapse it. */
   isOpen: boolean;
   activeSurfaceId: string | null;
   surfaces: RightPanelSurface[];
   dismissedDeviceSurfaceIds?: string[];
-  maximized?: true;
+  /** The side that fills the row; leaving it restores `layout`. */
+  fullscreen?: ChatPanelFullscreen;
+  /** How the chat and the panel share the row; absent is the default even split. */
+  layout?: ChatPanelLayout;
+  /** In a narrow window one side shows at a time; absent is the chat. */
+  narrowPane?: "panel";
   proactiveDiffTurnId?: RunId;
 }
 
@@ -281,7 +292,11 @@ interface RightPanelStoreState {
   reconcileFileSurfaces: (ref: ScopedThreadRef, workspaceAvailable: boolean) => void;
   show: (ref: ScopedThreadRef) => void;
   close: (ref: ScopedThreadRef) => void;
-  setMaximized: (ref: ScopedThreadRef, maximized: boolean) => void;
+  /** Fills the row with one side, replacing the other's fullscreen; null restores the layout. */
+  setFullscreen: (ref: ScopedThreadRef, side: ChatPanelFullscreen | null) => void;
+  /** Also leaves fullscreen, so the chosen layout shows. */
+  setLayout: (ref: ScopedThreadRef, layout: ChatPanelLayout) => void;
+  setNarrowPane: (ref: ScopedThreadRef, pane: "chat" | "panel") => void;
   toggleVisibility: (ref: ScopedThreadRef) => void;
   toggle: (
     ref: ScopedThreadRef,
@@ -491,7 +506,10 @@ const updateThreadStateMap = (
     next.activeSurfaceId === null &&
     next.surfaces.length === 0 &&
     !next.dismissedDeviceSurfaceIds?.length &&
-    next.proactiveDiffTurnId === undefined
+    next.proactiveDiffTurnId === undefined &&
+    next.fullscreen === undefined &&
+    next.layout === undefined &&
+    next.narrowPane === undefined
   ) {
     if (!(threadKey in byThreadKey)) return byThreadKey;
     const { [threadKey]: _removed, ...rest } = byThreadKey;
@@ -595,7 +613,7 @@ const userActionOnThread = (
   closesView: boolean,
 ): Partial<RightPanelStoreState> => ({
   ...updateThread(state, threadKey, (current) => {
-    const next = updater(current);
+    const next = leaveChatFullscreenForNewTab(current, updater(current), closesView);
     if (next === current) return current;
     const removedDevices = current.surfaces.filter(
       (surface) =>
@@ -625,6 +643,41 @@ const userActionOnThread = (
       }
     : {}),
 });
+
+/**
+ * A tab the user opens or switches to while the chat fills the row would open out of sight, so
+ * the layout comes back. Agent-driven opens do not pass through here, and leave it as it is.
+ */
+function leaveChatFullscreenForNewTab(
+  current: ThreadRightPanelState,
+  next: ThreadRightPanelState,
+  closesView: boolean,
+): ThreadRightPanelState {
+  if (next.fullscreen !== "chat" || closesView || next.activeSurfaceId === null) return next;
+  const opened =
+    next.activeSurfaceId !== current.activeSurfaceId ||
+    next.surfaces.length > current.surfaces.length;
+  if (!opened) return next;
+  const { fullscreen: _fullscreen, ...rest } = next;
+  return rest;
+}
+
+function migratedLayoutFields(saved: unknown): Partial<ThreadRightPanelState> {
+  if (!saved || typeof saved !== "object") return {};
+  const fields = saved as Record<string, unknown>;
+  const fullscreen =
+    fields.fullscreen === "chat" || fields.fullscreen === "panel"
+      ? fields.fullscreen
+      : // Before fullscreen chat existed, only the panel could fill the row.
+        fields.maximized === true
+        ? "panel"
+        : undefined;
+  return {
+    ...(fullscreen ? { fullscreen } : {}),
+    ...(isChatPanelLayout(fields.layout) ? { layout: fields.layout } : {}),
+    ...(fields.narrowPane === "panel" ? { narrowPane: "panel" as const } : {}),
+  };
+}
 
 const activated = (current: ThreadRightPanelState, surfaceId: string): ThreadRightPanelState =>
   current.surfaces.some((surface) => surface.id === surfaceId)
@@ -831,7 +884,7 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                           ),
                       }
                     : {}),
-                  ...(validThreadState?.maximized === true ? { maximized: true as const } : {}),
+                  ...migratedLayoutFields(validThreadState),
                 },
               ];
             }),
@@ -1428,12 +1481,30 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             current.isOpen ? { ...current, isOpen: false } : current,
           ),
         ),
-      setMaximized: (ref, maximized) =>
+      setFullscreen: (ref, side) =>
         set((state) =>
           automaticUpdate(state, scopedThreadKey(ref), (current) => {
-            if ((current.maximized ?? false) === maximized) return current;
-            const { maximized: _maximized, ...rest } = current;
-            return maximized ? { ...rest, maximized: true } : rest;
+            if ((current.fullscreen ?? null) === side) return current;
+            const { fullscreen: _fullscreen, ...rest } = current;
+            return side === null ? rest : { ...rest, fullscreen: side };
+          }),
+        ),
+      setLayout: (ref, layout) =>
+        set((state) =>
+          automaticUpdate(state, scopedThreadKey(ref), (current) => {
+            const { fullscreen: _fullscreen, layout: _layout, ...rest } = current;
+            // The default is stored as absent, so new threads and reset ones read the same.
+            return layout.kind === "preset" && layout.preset === "even"
+              ? rest
+              : { ...rest, layout };
+          }),
+        ),
+      setNarrowPane: (ref, pane) =>
+        set((state) =>
+          automaticUpdate(state, scopedThreadKey(ref), (current) => {
+            if ((current.narrowPane ?? "chat") === pane) return current;
+            const { narrowPane: _narrowPane, ...rest } = current;
+            return pane === "panel" ? { ...rest, narrowPane: "panel" } : rest;
           }),
         ),
       toggleVisibility: (ref) =>

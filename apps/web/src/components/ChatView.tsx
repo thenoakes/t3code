@@ -2,7 +2,7 @@ import { m } from "../i18n/messages";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useGT, useMessages } from "gt-react";
 import { ChildThreadApprovals } from "./chat/ChildThreadApprovals";
-import { workspaceAreaProps } from "../lib/workspaceFocus";
+import { requestWorkspaceFocus, workspaceAreaProps } from "../lib/workspaceFocus";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { resolveNewThreadModelSelection } from "@t3tools/shared/usageLimits";
 import { queuedRunEditBlockedReason } from "@t3tools/client-runtime/queued-run-edit";
@@ -321,7 +321,6 @@ import { useOpenFavoriteEditorShortcut } from "./chat/OpenInPickerShortcut";
 import {
   PanelLayoutControls,
   type PanelLayoutControlsProps,
-  RightPanelMaximizeControl,
   ThreadPanelHeaderControl,
   WorkspaceTitlebarControls,
 } from "./chat/PanelLayoutControls";
@@ -416,6 +415,11 @@ const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PROVIDER_MODELS: ServerProvider["models"] = [];
 const EMPTY_USAGE_LIMIT_SOURCES: UsageLimitSourceSnapshots = [];
 import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
+import {
+  type ChatPanelFullscreen,
+  type ChatPanelLayout,
+  DEFAULT_CHAT_PANEL_LAYOUT,
+} from "../chatPanelLayout";
 
 const EMPTY_FEEDBACK_SUBMISSIONS: ReadonlyArray<CodexFeedbackSubmission> = [];
 const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
@@ -1121,7 +1125,10 @@ export default function ChatView(props: ChatViewProps) {
   const rightPanelState = useRightPanelStore((state) =>
     selectThreadRightPanelState(state.byThreadKey, activeThreadRef),
   );
-  const shouldUsePlanSidebarSheet = prefersPlanSidebarSheet && rightPanelState.maximized !== true;
+  // Below the inline breakpoint one side shows at a time, switched rather than split.
+  const narrowLayout = prefersPlanSidebarSheet;
+  const panelFullscreen = embedded || narrowLayout ? null : (rightPanelState.fullscreen ?? null);
+  const chatFullscreen = panelFullscreen === "chat";
   const activeRightPanelSurface = useRightPanelStore((state) =>
     selectActiveRightPanelSurface(state.byThreadKey, activeThreadRef),
   );
@@ -1140,7 +1147,11 @@ export default function ChatView(props: ChatViewProps) {
   );
   const canReuseTerminal = activeThreadKnownSessionsRaw !== null;
   const previewPanelOpen = activeRightPanelKind === "preview" && browserAvailable;
-  const rightPanelOpen = rightPanelState.isOpen;
+  // Chat threads always show the panel, with the surface menu when it has no tabs, unless the
+  // chat fills the row or a narrow window shows the chat.
+  const rightPanelOpen =
+    !embedded &&
+    (narrowLayout ? rightPanelState.narrowPane === "panel" : panelFullscreen !== "chat");
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   const rightPanelPresenceValue = {
@@ -1155,20 +1166,16 @@ export default function ChatView(props: ChatViewProps) {
     panelAnimationDurationMs,
   );
   const rightPanelPresent = rightPanelPresence.present;
-  const rightPanelControlsInPanel =
-    shouldUsePlanSidebarSheet && rightPanelPresent && rightPanelOpen;
-  const rightPanelControlsAtRoot = rightPanelPresent && !shouldUsePlanSidebarSheet;
+  const rightPanelControlsAtRoot = rightPanelPresent;
   const renderedRightPanelSurface = rightPanelPresence.value?.activeSurface ?? null;
   const renderedRightPanelSurfaces = rightPanelPresence.value?.surfaces ?? [];
   const previewMiniPlayerVisible = shouldRenderPreviewMiniPlayer(
     activePreviewMiniPlayer?.source ?? null,
     renderedRightPanelSurface,
   );
-  const canMaximizeRightPanel = rightPanelOpen;
-  // An embedded side chat has no panel; a stale maximized flag would hide its own column.
-  const rightPanelMaximized =
-    !embedded && canMaximizeRightPanel && rightPanelState.maximized === true;
-  const inlineRightPanelOwnsTitleBar = rightPanelOpen && !shouldUsePlanSidebarSheet;
+  // The panel fills the row when fullscreen, and always in a narrow window.
+  const rightPanelMaximized = rightPanelOpen && (narrowLayout || panelFullscreen === "panel");
+  const inlineRightPanelOwnsTitleBar = rightPanelOpen;
   const [threadPanelPopoverHandle] = useState(PopoverCreateHandle);
   const [chatCanvasStore] = useState(createChatCanvasStore);
 
@@ -2111,7 +2118,7 @@ export default function ChatView(props: ChatViewProps) {
   const activeRunningTurnId = activeRuntime?.activeRunId ?? null;
   useProactivePanels({
     threadRef: isServerThread && !embedded ? activeThreadRef : null,
-    enabled: settings.proactivePanelsEnabled && !shouldUsePlanSidebarSheet && !embedded,
+    enabled: settings.proactivePanelsEnabled && !narrowLayout && !embedded,
     settingsHydrated: clientSettingsHydrated,
     threadDetailLoading,
     runningTurnId: activeRunningTurnId,
@@ -2128,13 +2135,13 @@ export default function ChatView(props: ChatViewProps) {
     visiblePullRequestCount,
     onDiffPanelOpen,
   });
-  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- consumes a pending maximize request from the right panel store once the panel can maximize
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- consumes a pending maximize request from the right panel store once the panel shows
   useEffect(() => {
-    if (!canMaximizeRightPanel) return;
+    if (!rightPanelOpen) return;
     if (useRightPanelStore.getState().consumeMaximizeRequest(routeThreadRef)) {
-      useRightPanelStore.getState().setMaximized(routeThreadRef, true);
+      useRightPanelStore.getState().setFullscreen(routeThreadRef, "panel");
     }
-  }, [canMaximizeRightPanel, routeThreadRef]);
+  }, [rightPanelOpen, routeThreadRef]);
   const {
     closeSurface: closeRightPanelSurface,
     closeOtherSurfaces: closeOtherRightPanelSurfacesStable,
@@ -2485,7 +2492,6 @@ export default function ChatView(props: ChatViewProps) {
     addFilesSurfaceStable,
     addPullRequestSurfaceStable,
     addPullRequestsSurfaceStable,
-    closePreviewPanelStable,
     copyRightPanelFilePathStable,
     createBrowserSurface,
     createBrowserSurfaceStable,
@@ -2498,6 +2504,8 @@ export default function ChatView(props: ChatViewProps) {
     toggleRightPanelMaximizedStable,
     toggleRightPanelStable,
     toggleThreadPanelStable,
+    setLayoutPresetStable,
+    toggleChatFullscreenStable,
     shortcuts: rightPanelShortcuts,
   } = useRightPanelActions({
     activeThreadRef,
@@ -2516,7 +2524,8 @@ export default function ChatView(props: ChatViewProps) {
     diffOpen,
     previewPanelOpen,
     rightPanelOpen,
-    canMaximizeRightPanel,
+    narrowLayout,
+    chatFullscreen,
     rightPanelMaximized,
     supportsPullRequests,
     pullRequestsSurfaceAvailable: linkedItemsSurfaceAvailable,
@@ -2524,6 +2533,15 @@ export default function ChatView(props: ChatViewProps) {
     activeProjectCwd,
     onDiffPanelOpen,
     closeRightPanelSurface,
+  });
+  const setChatPanelLayoutStable = useStableCallback((layout: ChatPanelLayout) => {
+    if (activeThreadRef) useRightPanelStore.getState().setLayout(activeThreadRef, layout);
+  });
+  // The divider's buttons each choose a side; choosing the other replaces the current one.
+  const setChatPanelFullscreenStable = useStableCallback((side: ChatPanelFullscreen) => {
+    if (!activeThreadRef) return;
+    if (side === "panel") requestWorkspaceFocus({ area: "panel" });
+    useRightPanelStore.getState().setFullscreen(activeThreadRef, side);
   });
   const pullRequestSurfaceAvailable = supportsPullRequests && pullRequestPanelTarget !== null;
   const {
@@ -2957,9 +2975,13 @@ export default function ChatView(props: ChatViewProps) {
   // An embedded thread's commands run in its host's terminal, which is the host's checkout.
   const runsOutsideHostCheckout =
     embedded && (activeThread?.worktreePath ?? null) !== (panelHostShell?.worktreePath ?? null);
-  // A maximized panel covers the terminal drawer the command runs in.
+  // A fullscreen panel covers the terminal drawer the command runs in.
   const runSideChatShellCommandStable = useStableCallback((command: string) => {
-    if (activeThreadRef) useRightPanelStore.getState().setMaximized(activeThreadRef, false);
+    if (activeThreadRef) {
+      const store = useRightPanelStore.getState();
+      const fullscreen = selectThreadRightPanelState(store.byThreadKey, activeThreadRef).fullscreen;
+      if (fullscreen === "panel") store.setFullscreen(activeThreadRef, null);
+    }
     runShellCommandStable(command);
   });
   // Main-thread surfaces show this reason; `/side` sent anyway gets it as a toast.
@@ -3432,24 +3454,47 @@ export default function ChatView(props: ChatViewProps) {
     threadPanelPresentation,
     threadPanelPopoverHandle,
     threadPanelShortcutLabel: shortcutLabelForCommand(keybindings, "threadPanel.toggle"),
-    rightPanelAvailable: activeProject !== null,
+    // The panel no longer collapses; this control leaves chat fullscreen, or in a narrow window
+    // switches to the panel.
+    rightPanelAvailable: true,
     rightPanelOpen,
     rightPanelShortcutLabel: shortcutLabelForCommand(keybindings, "rightPanel.toggle"),
+    rightPanelLabel: gt("Show panel"),
     onToggleTerminal: toggleTerminalVisibilityStable,
     onToggleThreadPanel: toggleThreadPanelStable,
     onToggleRightPanel: toggleRightPanelStable,
   } satisfies PanelLayoutControlsProps;
+  // The chat's fullscreen toggle sits on the chat side: in its header beside the panel, or in the
+  // window's corner while the chat fills the row. A narrow window shows one side anyway.
+  const chatFullscreenControl =
+    narrowLayout || embedded
+      ? null
+      : {
+          active: chatFullscreen,
+          shortcutLabel: shortcutLabelForCommand(keybindings, "layout.toggleChatFullscreen"),
+          onToggle: toggleChatFullscreenStable,
+        };
   const panelToggleControls = (
     <PanelLayoutControls
       {...panelToggleControlProps}
+      {...(chatFullscreenControl && !rightPanelOpen
+        ? { chatFullscreen: chatFullscreenControl }
+        : {})}
       showThreadPanelControl={!inlineRightPanelOwnsTitleBar}
+      showRightPanelControl={narrowLayout && !rightPanelOpen}
     />
   );
-  const threadPanelHeaderControl = <ThreadPanelHeaderControl {...panelToggleControlProps} />;
+  const threadPanelHeaderControl = (
+    <ThreadPanelHeaderControl
+      {...panelToggleControlProps}
+      {...(chatFullscreenControl ? { chatFullscreen: chatFullscreenControl } : {})}
+    />
+  );
   const panelLayoutControls = (
     <WorkspaceTitlebarControls
-      showMaximizeControl={!shouldUsePlanSidebarSheet}
+      showMaximizeControl
       rightPanelOpen={rightPanelOpen}
+      {...(narrowLayout ? { restoreLabel: gt("Show chat") } : {})}
       animationsActive={panelAnimationsActive}
       maximized={rightPanelMaximized}
       onToggleMaximized={toggleRightPanelMaximizedStable}
@@ -3509,7 +3554,7 @@ export default function ChatView(props: ChatViewProps) {
                 className="pointer-events-none fixed top-[var(--workspace-controls-top)] right-[var(--workspace-controls-right)] h-[var(--workspace-topbar-height)] w-28 [-webkit-app-region:no-drag]"
               />
             ) : null}
-            {!rightPanelControlsAtRoot && !rightPanelControlsInPanel ? panelLayoutControls : null}
+            {!rightPanelControlsAtRoot ? panelLayoutControls : null}
             {inlineRightPanelOwnsTitleBar ? threadPanelHeaderControl : null}
             <ChatHeader
               activeThreadEnvironmentId={activeThread.environmentId}
@@ -4138,26 +4183,15 @@ export default function ChatView(props: ChatViewProps) {
 
       {rightPanelPresent && activeThreadRef && !embedded ? (
         <ChatRightPanel
-          sheet={shouldUsePlanSidebarSheet}
           workspaceLayoutElement={workspaceLayoutElement}
-          widthStorageKey={`t3code:preview-panel-width:${activeThreadKey}`}
-          sheetAnimationDurationMs={panelAnimationsActive ? panelAnimationDurationMs : 0}
-          onCloseSheet={closePreviewPanelStable}
+          layout={rightPanelState.layout ?? DEFAULT_CHAT_PANEL_LAYOUT}
+          onLayoutChange={setChatPanelLayoutStable}
+          onPreset={setLayoutPresetStable}
+          onFullscreen={setChatPanelFullscreenStable}
           open={rightPanelOpen}
           keybindings={keybindings}
           getShortcutContext={getShortcutContextStable}
           maximized={rightPanelMaximized}
-          layoutControls={
-            rightPanelOpen ? (
-              <div className="mr-px flex items-center gap-1">
-                <RightPanelMaximizeControl
-                  maximized={rightPanelMaximized}
-                  onToggle={toggleRightPanelMaximizedStable}
-                />
-                {panelToggleControls}
-              </div>
-            ) : null
-          }
           surfaces={renderedRightPanelSurfaces}
           environmentId={activeThreadRef.environmentId}
           activeSurfaceId={renderedRightPanelSurface?.id ?? null}

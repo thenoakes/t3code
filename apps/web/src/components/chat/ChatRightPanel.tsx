@@ -1,51 +1,42 @@
-import { usePreviewPanelInlineSize } from "../../hooks/usePreviewPanelInlineSize";
-import { RightPanelSheet } from "../RightPanelSheet";
+import type { ChatPanelLayout, ChatPanelPreset } from "../../chatPanelLayout";
+import { useChatPanelInlineSize } from "../../hooks/useChatPanelInlineSize";
 import { RightPanelTabs, type RightPanelTabsProps } from "../RightPanelTabs";
+import { ChatPanelDividerControls } from "./ChatPanelDividerControls";
 
-type ChatRightPanelProps = Omit<RightPanelTabsProps, "mode" | "inlineSize" | "maximized"> & {
-  readonly sheet: boolean;
+type ChatRightPanelProps = Omit<
+  RightPanelTabsProps,
+  "mode" | "inlineSize" | "maximized" | "layoutControls"
+> & {
   readonly maximized: boolean;
   readonly workspaceLayoutElement: HTMLElement | null;
-  readonly widthStorageKey: string;
-  readonly sheetAnimationDurationMs: number;
-  readonly onCloseSheet: () => void;
+  readonly layout: ChatPanelLayout;
+  readonly onLayoutChange: (layout: ChatPanelLayout) => void;
+  readonly onPreset: (preset: ChatPanelPreset) => void;
+  readonly onFullscreen: (side: "chat" | "panel") => void;
 };
 
 /**
- * The right panel, inline beside the chat column or as a sheet on narrow
- * layouts. Its width follows a resize drag every frame, so the width state
- * lives here rather than in ChatView.
+ * The right panel beside the chat column. Its width follows the thread's layout, and a divider
+ * drag every frame, so the width state lives here rather than in ChatView.
  */
 export function ChatRightPanel(props: ChatRightPanelProps) {
   const {
-    sheet,
     workspaceLayoutElement,
-    widthStorageKey,
-    sheetAnimationDurationMs,
-    onCloseSheet,
     maximized,
-    layoutControls,
+    layout,
+    onLayoutChange,
+    onPreset,
+    onFullscreen,
     ...tabs
   } = props;
-  const inlineSize = usePreviewPanelInlineSize({
+  const inlineSize = useChatPanelInlineSize({
     container: workspaceLayoutElement,
-    widthStorageKey,
+    layout,
+    onLayoutChange,
+    onDividerDoubleClick: () => onPreset("even"),
+    dividerControls: (
+      <ChatPanelDividerControls layout={layout} onPreset={onPreset} onFullscreen={onFullscreen} />
+    ),
   });
-  if (!sheet) {
-    return <RightPanelTabs {...tabs} mode="inline" maximized={maximized} inlineSize={inlineSize} />;
-  }
-  return (
-    <RightPanelSheet
-      animationDurationMs={sheetAnimationDurationMs}
-      open={tabs.open === true}
-      onClose={onCloseSheet}
-    >
-      <RightPanelTabs
-        {...tabs}
-        mode="sheet"
-        inlineSize={inlineSize}
-        layoutControls={layoutControls}
-      />
-    </RightPanelSheet>
-  );
+  return <RightPanelTabs {...tabs} mode="inline" maximized={maximized} inlineSize={inlineSize} />;
 }

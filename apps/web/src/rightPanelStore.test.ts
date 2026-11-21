@@ -490,22 +490,62 @@ describe("rightPanelStore", () => {
     expect(selectActiveRightPanel(useRightPanelStore.getState().byThreadKey, refA)).toBe("diff");
   });
 
-  it("keeps a maximized panel per thread without counting it as a manual choice", () => {
+  it("keeps fullscreen per thread without counting it as a manual choice", () => {
     const store = useRightPanelStore.getState();
     store.open(refA, "preview");
     store.open(refB, "diff");
     const revision = store.getUserActionRevision(refA);
-    store.setMaximized(refA, true);
-    store.setMaximized(refB, true);
-    store.setMaximized(refB, false);
+    store.setFullscreen(refA, "panel");
+    store.setFullscreen(refB, "panel");
+    store.setFullscreen(refB, null);
 
     const { byThreadKey } = useRightPanelStore.getState();
-    expect(selectThreadRightPanelState(byThreadKey, refA).maximized).toBe(true);
-    expect(selectThreadRightPanelState(byThreadKey, refB).maximized).toBeUndefined();
+    expect(selectThreadRightPanelState(byThreadKey, refA).fullscreen).toBe("panel");
+    expect(selectThreadRightPanelState(byThreadKey, refB).fullscreen).toBeUndefined();
     expect(store.getUserActionRevision(refA)).toBe(revision);
   });
 
-  it("restores a saved maximized panel during migration", () => {
+  it("swaps fullscreen sides, and a chosen layout leaves fullscreen", () => {
+    const store = useRightPanelStore.getState();
+    const panel = () =>
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    store.setLayout(refA, { kind: "preset", preset: "panel-min" });
+    store.setFullscreen(refA, "panel");
+    store.setFullscreen(refA, "chat");
+    expect(panel().fullscreen).toBe("chat");
+    // Leaving fullscreen restores the layout from before it.
+    store.setFullscreen(refA, null);
+    expect(panel().layout).toEqual({ kind: "preset", preset: "panel-min" });
+
+    store.setFullscreen(refA, "panel");
+    store.setLayout(refA, { kind: "preset", preset: "even" });
+    expect(panel().fullscreen).toBeUndefined();
+    // The default split is stored as absent, as for a new thread.
+    expect(panel().layout).toBeUndefined();
+  });
+
+  it("leaves chat fullscreen for a tab the user opens, but not for an agent's", () => {
+    const store = useRightPanelStore.getState();
+    const panel = () =>
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA);
+    store.setFullscreen(refA, "chat");
+    store.openProactive(
+      refA,
+      { kind: "diff", turnId: RunId.make("run-1") },
+      store.getUserActionRevision(refA),
+    );
+    expect(panel().fullscreen).toBe("chat");
+
+    store.open(refA, "preview");
+    expect(panel().fullscreen).toBeUndefined();
+
+    // Closing a tab is not opening one.
+    store.setFullscreen(refA, "chat");
+    store.closeSurface(refA, panel().activeSurfaceId!);
+    expect(panel().fullscreen).toBe("chat");
+  });
+
+  it("restores saved layout and fullscreen during migration, maximized as panel fullscreen", () => {
     const migrated = migratePersistedRightPanelState({
       byThreadKey: {
         "env-1:thread-A": {
@@ -513,10 +553,26 @@ describe("rightPanelStore", () => {
           activeSurfaceId: "browser:new",
           surfaces: [{ id: "browser:new", kind: "preview", resourceId: null }],
           maximized: true,
+          layout: { kind: "custom", panelFraction: 0.3 },
+          narrowPane: "panel",
+        },
+        "env-1:thread-B": {
+          isOpen: false,
+          activeSurfaceId: null,
+          surfaces: [],
+          fullscreen: "sideways",
+          layout: { kind: "preset", preset: "huge" },
         },
       },
     });
-    expect(selectThreadRightPanelState(migrated.byThreadKey, refA).maximized).toBe(true);
+    expect(selectThreadRightPanelState(migrated.byThreadKey, refA)).toMatchObject({
+      fullscreen: "panel",
+      layout: { kind: "custom", panelFraction: 0.3 },
+      narrowPane: "panel",
+    });
+    const threadB = selectThreadRightPanelState(migrated.byThreadKey, refB);
+    expect(threadB.fullscreen).toBeUndefined();
+    expect(threadB.layout).toBeUndefined();
   });
 
   it("opens a linked thread once per thread and environment it is read through", () => {

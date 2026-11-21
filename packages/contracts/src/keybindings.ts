@@ -71,6 +71,11 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "threadPanel.toggle",
   "rightPanel.toggleMaximized",
   "rightPanel.close",
+  // Chat thread layout presets and chat fullscreen; unbound by default.
+  "layout.chatMinimum",
+  "layout.even",
+  "layout.panelMinimum",
+  "layout.toggleChatFullscreen",
   "view.reopenClosed",
   "pullRequest.copyNumber",
   "diff.toggle",
