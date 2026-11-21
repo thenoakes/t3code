@@ -2840,6 +2840,7 @@
   "dffb9313e8277695": "此线程没有工作区。",
   "970fe9d61fe1acdb": "''{path}'' 位于工作区之外。",
   "4333d220c55ba5e4": "工作区查询失败。",
+  "c169a8dcbe366690": "''{path}'' 不是绝对路径。",
   "4d71697ed52788cd": "已收尾 {count, plural, other {{count} 个会话}}",
   "96f74e61e5e2394a": "已暂缓 {count, plural, other {{count} 个会话}}",
   "158d77e7a872186e": "已取消置顶 {count, plural, other {{count} 个会话}}",

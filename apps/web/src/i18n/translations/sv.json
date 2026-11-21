@@ -2836,6 +2836,7 @@
   "dffb9313e8277695": "Den här tråden har ingen arbetsyta.",
   "970fe9d61fe1acdb": "''{path}'' ligger utanför arbetsytan.",
   "4333d220c55ba5e4": "Frågan mot arbetsytan misslyckades.",
+  "c169a8dcbe366690": "''{path}'' är ingen absolut sökväg.",
   "4d71697ed52788cd": "Markerade {count, plural, one {{count} tråd som klar} other {{count} trådar som klara}}",
   "96f74e61e5e2394a": "Snoozade {count, plural, one {{count} tråd} other {{count} trådar}}",
   "158d77e7a872186e": "Lossade {count, plural, one {{count} tråd} other {{count} trådar}}",

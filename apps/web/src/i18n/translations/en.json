@@ -2836,6 +2836,7 @@
   "dffb9313e8277695": "This thread has no workspace.",
   "970fe9d61fe1acdb": "''{path}'' is outside the workspace.",
   "4333d220c55ba5e4": "Workspace query failed.",
+  "c169a8dcbe366690": "''{path}'' is not an absolute path.",
   "4d71697ed52788cd": "Settled {count, plural, one {{count} thread} other {{count} threads}}",
   "96f74e61e5e2394a": "Snoozed {count, plural, one {{count} thread} other {{count} threads}}",
   "158d77e7a872186e": "Unpinned {count, plural, one {{count} thread} other {{count} threads}}",

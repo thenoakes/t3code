@@ -9,6 +9,9 @@ import textMateWorkerUrl from "@codingame/monaco-vscode-textmate-service-overrid
 import { MonacoVscodeApiWrapper } from "monaco-languageclient/vscodeApiWrapper";
 import { useWorkerFactory, Worker } from "monaco-languageclient/workerFactory";
 
+import { openEditorAt, type RevealTarget } from "./navigation";
+import { registerWorkspaceFileSystem } from "./workspaceFileSystem";
+
 const THEMES = { light: "Light Modern", dark: "Dark Modern" } as const;
 
 function userConfiguration(appearance: "light" | "dark"): string {
@@ -30,7 +33,18 @@ export async function startMonaco(appearance: "light" | "dark"): Promise<void> {
     currentAppearance = appearance;
     started = new MonacoVscodeApiWrapper({
       $type: "extended",
-      viewsConfig: { $type: "EditorService" },
+      viewsConfig: {
+        $type: "EditorService",
+        // Go-to-definition into another file opens it in its own editor tab.
+        openEditorFunc: async (modelRef, options) => {
+          // Text editor options, which carry the place to show.
+          const selection = (options as { readonly selection?: RevealTarget } | undefined)
+            ?.selection;
+          openEditorAt(modelRef.object.textEditorModel.uri.fsPath, selection);
+          modelRef.dispose();
+          return undefined;
+        },
+      },
       logLevel: LogLevel.Warning,
       userConfiguration: { json: userConfiguration(appearance) },
       monacoWorkerFactory: (logger) =>
@@ -41,7 +55,9 @@ export async function startMonaco(appearance: "light" | "dark"): Promise<void> {
             TextMateWorker: () => new Worker(textMateWorkerUrl, { type: "module" }),
           },
         }),
-    }).start();
+    })
+      .start()
+      .then(() => registerWorkspaceFileSystem());
     // A failed start can be retried by opening the panel again.
     started.catch(() => {
       started = undefined;

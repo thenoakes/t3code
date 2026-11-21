@@ -15,7 +15,12 @@ import { useThreadShell } from "~/state/entities";
 import { getPanelExtension } from "./registry";
 import type { PanelHost, PanelThread } from "./types";
 import { connectWorkspaceLanguageServer } from "./languageServerConnection";
-import { listWorkspaceDirectory, readWorkspaceFile, writeWorkspaceFile } from "./workspaceFiles";
+import {
+  listWorkspaceDirectory,
+  readHostFile,
+  readWorkspaceFile,
+  writeWorkspaceFile,
+} from "./workspaceFiles";
 
 /** Renders an extension surface, keeping a broken or missing extension inside its own tab. */
 export function ExtensionPanel(props: {
@@ -66,6 +71,8 @@ export function ExtensionPanel(props: {
       listWorkspaceDirectory(props.environmentId, props.workspaceRoot, relativePath),
     readFile: (relativePath) =>
       readWorkspaceFile(props.environmentId, props.workspaceRoot, relativePath),
+    readHostFile: (absolutePath) =>
+      readHostFile(props.environmentId, props.workspaceRoot, absolutePath),
     connectLanguageServer: (language) =>
       connectWorkspaceLanguageServer(props.environmentId, props.workspaceRoot, language),
     writeFile: (relativePath, contents) =>

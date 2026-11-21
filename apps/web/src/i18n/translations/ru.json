@@ -2836,6 +2836,7 @@
   "dffb9313e8277695": "У этой ветки нет рабочей области.",
   "970fe9d61fe1acdb": "''{path}'' находится вне рабочей области.",
   "4333d220c55ba5e4": "Ошибка запроса к рабочей области.",
+  "c169a8dcbe366690": "''{path}'' не является абсолютным путём.",
   "4d71697ed52788cd": "Разобрано: {count, plural, one {{count} тред} few {{count} треда} many {{count} тредов} other {{count} треда}}",
   "96f74e61e5e2394a": "Отложено: {count, plural, one {{count} тред} few {{count} треда} many {{count} тредов} other {{count} треда}}",
   "158d77e7a872186e": "Откреплено: {count, plural, one {{count} тред} few {{count} треда} many {{count} тредов} other {{count} треда}}",

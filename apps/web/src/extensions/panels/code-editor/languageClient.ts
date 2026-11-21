@@ -11,11 +11,14 @@ import {
 } from "vscode-languageclient/browser";
 
 import type { PanelHost, PanelLanguageServerConnection } from "../../types";
+import { isOpenFile } from "./workspaces";
 
 type LanguageServerHost = Pick<PanelHost, "connectLanguageServer">;
 
 export type LanguageClientStatus =
   | { readonly kind: "starting" }
+  // Answering, but tsserver is still loading the project, so cross-file answers are missing.
+  | { readonly kind: "loading" }
   | { readonly kind: "ready" }
   | { readonly kind: "stopped"; readonly reason: string };
 
@@ -126,6 +129,31 @@ class WorkspaceLanguageClient {
           name: this.workspaceRoot.split(/[\\/]/).at(-1) ?? this.workspaceRoot,
           uri: Uri.file(this.workspaceRoot),
         },
+        middleware: {
+          // tsserver reports diagnostics once it has loaded the file's project; until then a
+          // definition in another file resolves to the import itself.
+          handleDiagnostics: (uri, diagnostics, next) => {
+            if (this.current === current && this.status.kind === "loading") {
+              this.setStatus({ kind: "ready" });
+            }
+            next(uri, diagnostics);
+          },
+          // Edits to a file no editor tab shows would stay in Monaco's memory and be lost, since
+          // only a tab saves. Refuse such a rename rather than apply part of it.
+          provideRenameEdits: async (document, position, newName, token, next) => {
+            const edit = await next(document, position, newName, token);
+            const closed = (edit?.entries() ?? [])
+              .map(([uri]) => uri)
+              .filter((uri) => !isOpenFile(uri.toString()));
+            if (closed.length > 0) {
+              const names = closed.map((uri) => uri.path.split("/").at(-1)).join(", ");
+              throw new Error(
+                `This rename also changes files that are not open: ${names}. Open them in the code editor, then rename again.`,
+              );
+            }
+            return edit;
+          },
+        },
         // Restarts are handled here, with a fresh server and connection.
         errorHandler: {
           error: () => ({ action: ErrorAction.Continue }),
@@ -145,7 +173,7 @@ class WorkspaceLanguageClient {
       client.clientOptions.initializationOptions = initializationOptions;
       try {
         await client.start();
-        if (this.current === current) this.setStatus({ kind: "ready" });
+        if (this.current === current) this.setStatus({ kind: "loading" });
       } catch (cause) {
         if (this.current === current) {
           this.setStatus({

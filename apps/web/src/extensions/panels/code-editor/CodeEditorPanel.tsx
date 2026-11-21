@@ -7,6 +7,8 @@ import type { PanelProps } from "../../types";
 import type { CodeEditorState } from "./index";
 import { acquireWorkspaceLanguageClient, type LanguageClientStatus } from "./languageClient";
 import { startMonaco } from "./monaco";
+import { onRevealRequest, type RevealTarget, takeReveal } from "./navigation";
+import { isAbsolutePath, registerOpenFile, registerWorkspace } from "./workspaces";
 import { nextUnsavedState, restoreUnsaved } from "./unsaved";
 
 type Status =
@@ -27,6 +29,7 @@ const errorMessage = (cause: unknown) => (cause instanceof Error ? cause.message
 
 /** The model URI is the file's path on the server's machine, as a language server will expect. */
 function fileUri(workspaceRoot: string, path: string): string {
+  if (isAbsolutePath(path)) return Uri.file(path).toString();
   const separator = workspaceRoot.includes("\\") && !workspaceRoot.includes("/") ? "\\" : "/";
   return Uri.file(`${workspaceRoot.replace(/[\\/]+$/, "")}${separator}${path}`).toString();
 }
@@ -56,6 +59,12 @@ export default function CodeEditorPanel({
   const [conflict, setConflict] = useState<Conflict | null>(null);
   const [languageStatus, setLanguageStatus] = useState<LanguageClientStatus | null>(null);
   const keepUnsavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // An absolute path is a file outside the workspace, such as a dependency's source, shown
+  // read-only.
+  const readPath = (filePath: string) =>
+    isAbsolutePath(filePath) ? host.readHostFile(filePath) : host.readFile(filePath);
+  const isHostFile = path !== null && isAbsolutePath(path);
 
   const editorText = () => appRef.current?.getTextModels().modified?.getValue();
 
@@ -87,8 +96,7 @@ export default function CodeEditorPanel({
   /** Reads the file again and takes the disk's copy, unless that would drop unsaved edits. */
   const syncWithDisk = useEffectEvent((_revision: string | null) => {
     if (path === null || appRef.current === null || saving) return;
-    host
-      .readFile(path)
+    readPath(path)
       .then((file) => {
         const current = editorText();
         if (current === undefined) return;
@@ -109,7 +117,7 @@ export default function CodeEditorPanel({
 
   const save = useEffectEvent(() => {
     const text = editorText();
-    if (path === null || text === undefined || saving) return;
+    if (path === null || text === undefined || saving || isHostFile) return;
     setSaving(true);
     setSaveError(null);
     host
@@ -136,9 +144,13 @@ export default function CodeEditorPanel({
     let app: EditorApp | null = null;
     let contentListener: { dispose(): void } | undefined;
     let releaseLanguageClient: (() => void) | undefined;
+    let releaseWorkspace: (() => void) | undefined;
+    let releaseOpenFile: (() => void) | undefined;
+    let stopRevealListener: (() => void) | undefined;
     void (async () => {
       try {
-        const [file] = await Promise.all([host.readFile(filePath), startMonaco(appearance)]);
+        const [file] = await Promise.all([readPath(filePath), startMonaco(appearance)]);
+        const readOnly = file?.truncated === true || isAbsolutePath(filePath);
         if (cancelled) return;
         if (file === null) {
           setStatus({ kind: "missing" });
@@ -151,8 +163,8 @@ export default function CodeEditorPanel({
           codeResources: {
             modified: { text: restored.text, uri: fileUri(root, filePath) },
           },
-          readOnly: file.truncated,
-          editorOptions: { readOnly: file.truncated },
+          readOnly,
+          editorOptions: { readOnly },
         });
         await app.start(container);
         if (cancelled) return;
@@ -183,7 +195,26 @@ export default function CodeEditorPanel({
           keybindings: [KeyMod.CtrlCmd | KeyCode.KeyS],
           run: () => save(),
         });
-        if (TYPESCRIPT_FILE.test(filePath)) {
+        const workspaceKey = `${environmentId}\u0000${root}`;
+        releaseWorkspace = registerWorkspace(workspaceKey, root, host);
+        releaseOpenFile = registerOpenFile(fileUri(root, filePath));
+        // Go-to-definition from another editor may have asked for a place in this file.
+        const reveal = (target: RevealTarget | undefined) => {
+          if (!target || !editor) return;
+          const selection = {
+            startLineNumber: target.startLineNumber,
+            startColumn: target.startColumn,
+            endLineNumber: target.endLineNumber ?? target.startLineNumber,
+            endColumn: target.endColumn ?? target.startColumn,
+          };
+          editor.setSelection(selection);
+          editor.revealRangeInCenter(selection);
+          editor.focus();
+        };
+        reveal(takeReveal(workspaceKey, filePath));
+        stopRevealListener = onRevealRequest(() => reveal(takeReveal(workspaceKey, filePath)));
+        // The language client answers for workspace files only.
+        if (TYPESCRIPT_FILE.test(filePath) && !isAbsolutePath(filePath)) {
           releaseLanguageClient = acquireWorkspaceLanguageClient(
             `${environmentId}\u0000${root}`,
             root,
@@ -194,7 +225,9 @@ export default function CodeEditorPanel({
         setStatus(
           file.truncated
             ? { kind: "error", message: "File too large to edit; showing its start read-only." }
-            : { kind: "ready" },
+            : isAbsolutePath(filePath)
+              ? { kind: "error", message: "Outside the workspace, so read-only." }
+              : { kind: "ready" },
         );
       } catch (cause) {
         if (!cancelled) setStatus({ kind: "error", message: errorMessage(cause) });
@@ -206,6 +239,9 @@ export default function CodeEditorPanel({
       if (app !== null) keepUnsaved(filePath);
       contentListener?.dispose();
       releaseLanguageClient?.();
+      stopRevealListener?.();
+      releaseOpenFile?.();
+      releaseWorkspace?.();
       appRef.current = null;
       void app?.dispose();
     };
@@ -272,7 +308,13 @@ export default function CodeEditorPanel({
         <Button
           size="compact"
           type="button"
-          disabled={!dirty || saving || status.kind !== "ready" || conflict?.kind === "changed"}
+          disabled={
+            isHostFile ||
+            !dirty ||
+            saving ||
+            status.kind !== "ready" ||
+            conflict?.kind === "changed"
+          }
           onClick={() => save()}
         >
           {saving ? "Saving…" : dirty ? "Save" : "Saved"}
@@ -335,7 +377,9 @@ export default function CodeEditorPanel({
             ? "TypeScript language server ready"
             : languageStatus.kind === "starting"
               ? "Starting TypeScript language server…"
-              : `TypeScript language server stopped. ${languageStatus.reason}`}
+              : languageStatus.kind === "loading"
+                ? "TypeScript is loading the project…"
+                : `TypeScript language server stopped. ${languageStatus.reason}`}
         </div>
       ) : null}
     </div>

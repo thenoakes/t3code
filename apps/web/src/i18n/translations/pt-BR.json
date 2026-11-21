@@ -2836,6 +2836,7 @@
   "dffb9313e8277695": "Esta conversa não tem um espaço de trabalho.",
   "970fe9d61fe1acdb": "''{path}'' está fora do espaço de trabalho.",
   "4333d220c55ba5e4": "Falha na consulta ao workspace.",
+  "c169a8dcbe366690": "''{path}'' não é um caminho absoluto.",
   "4d71697ed52788cd": "{count, plural, one {{count} thread concluída} other {{count} threads concluídas}}",
   "96f74e61e5e2394a": "{count, plural, one {{count} thread adiada} other {{count} threads adiadas}}",
   "158d77e7a872186e": "{count, plural, one {{count} thread desafixada} other {{count} threads desafixadas}}",

@@ -121,6 +121,12 @@ export interface PanelHost<State = unknown> {
   /** Reads a workspace text file, or null when it does not exist. Rejects like `listDirectory`. */
   readFile(relativePath: string): Promise<PanelFile | null>;
   /**
+   * Reads any text file on the machine that holds the workspace, by absolute path, as the Files
+   * tab can. Read-only: for showing what lies outside the workspace, such as a dependency's
+   * source that a definition points to. Null when it does not exist.
+   */
+  readHostFile(absolutePath: string): Promise<PanelFile | null>;
+  /**
    * Replaces a workspace file's contents, creating it if needed. Rejects like `listDirectory`, and
    * when the connection may not write files. It does not check for changes made since the read.
    */

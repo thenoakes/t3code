@@ -2836,6 +2836,7 @@
   "dffb9313e8277695": "Ce fil n’a pas d’espace de travail.",
   "970fe9d61fe1acdb": "''{path}'' est en dehors de l’espace de travail.",
   "4333d220c55ba5e4": "Échec de la requête sur l’espace de travail.",
+  "c169a8dcbe366690": "''{path}'' n’est pas un chemin absolu.",
   "4d71697ed52788cd": "{count, plural, one {{count} fil clos} other {{count} fils clos}}",
   "96f74e61e5e2394a": "{count, plural, one {{count} fil reporté} other {{count} fils reportés}}",
   "158d77e7a872186e": "{count, plural, one {{count} fil désépinglé} other {{count} fils désépinglés}}",

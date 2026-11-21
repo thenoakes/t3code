@@ -2836,6 +2836,7 @@
   "dffb9313e8277695": "Este hilo no tiene espacio de trabajo.",
   "970fe9d61fe1acdb": "''{path}'' está fuera del espacio de trabajo.",
   "4333d220c55ba5e4": "Falló la consulta al espacio de trabajo.",
+  "c169a8dcbe366690": "''{path}'' no es una ruta absoluta.",
   "4d71697ed52788cd": "{count, plural, one {Se resolvió {count} hilo} other {Se resolvieron {count} hilos}}",
   "96f74e61e5e2394a": "{count, plural, one {Se pospuso {count} hilo} other {Se pospusieron {count} hilos}}",
   "158d77e7a872186e": "{count, plural, one {Se desfijó {count} hilo} other {Se desfijaron {count} hilos}}",

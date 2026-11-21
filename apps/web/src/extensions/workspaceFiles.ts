@@ -75,6 +75,29 @@ export async function readWorkspaceFile(
   return { path, contents: result.value.contents, truncated: result.value.truncated };
 }
 
+export async function readHostFile(
+  environmentId: EnvironmentId,
+  cwd: string | undefined,
+  absolutePath: string,
+): Promise<PanelFile | null> {
+  // The read is answered on the workspace's machine, so it needs one to address.
+  if (!cwd) throw new Error(m(msg("This thread has no workspace.")));
+  if (!/^(?:\/|[A-Za-z]:[\\/])/.test(absolutePath)) {
+    throw new Error(m(msg("''{path}'' is not an absolute path.", { path: absolutePath })));
+  }
+  const result = await executeAtomQuery(
+    appAtomRegistry,
+    projectEnvironment.readFile({
+      environmentId,
+      input: { cwd, relativePath: absolutePath, allowMissing: true },
+    }),
+    QUERY_OPTIONS,
+  );
+  if (result._tag === "Failure") throw failure(result);
+  if (result.value.exists === false) return null;
+  return { path: absolutePath, contents: result.value.contents, truncated: result.value.truncated };
+}
+
 export async function writeWorkspaceFile(
   environmentId: EnvironmentId,
   cwd: string | undefined,
