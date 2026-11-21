@@ -1,5 +1,7 @@
 // @effect-diagnostics-next-line nodeBuiltinImport:off -- Vite config runs before any Effect runtime.
 import * as NodeFSP from "node:fs/promises";
+// @effect-diagnostics-next-line nodeBuiltinImport:off -- Vite config runs before any Effect runtime.
+import * as NodePath from "node:path";
 import * as NodeZlib from "node:zlib";
 
 import react from "@vitejs/plugin-react";
@@ -268,6 +270,54 @@ function bundledDevStableNamesPlugin(): Plugin {
   };
 }
 
+const MONACO_VSCODE_MODULE =
+  /node_modules[/\\](?:@codingame[/\\]monaco-vscode|@vscode[/\\]diff|monaco-languageclient)/;
+
+// monaco-vscode-api adds its stylesheets to the page itself, so it imports each one as a string.
+function monacoVscodeCssPlugin(): Plugin {
+  return {
+    name: "t3code:monaco-vscode-css",
+    enforce: "pre",
+    async resolveId(source, importer, options) {
+      if (!source.endsWith(".css")) return undefined;
+      const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
+      if (
+        !resolved ||
+        !MONACO_VSCODE_MODULE.test(resolved.id) ||
+        !/\.css$/.test(resolved.id.split("?")[0] ?? resolved.id)
+      ) {
+        return undefined;
+      }
+      return { ...resolved, id: `${resolved.id}?inline` };
+    },
+  };
+}
+
+// Dev pre-bundling moves dependency code into .vite/deps, which breaks the
+// `new URL("./file", import.meta.url)` calls monaco-vscode-api uses to find its grammars, themes
+// and workers. Point them at the original files, which the dev server serves under /@fs/.
+function monacoVscodeDevAssetUrlsPlugin() {
+  return {
+    name: "t3code:monaco-vscode-dev-asset-urls",
+    transform(code: string, id: string) {
+      if (!MONACO_VSCODE_MODULE.test(id) || !code.includes("import.meta.url")) {
+        return null;
+      }
+      const directory = NodePath.dirname(id.split("?")[0] ?? id);
+      // Relative file names only; bare package names and absolute URLs are left alone.
+      return code.replace(
+        /new URL\((["'`])([^"'`$:@/][^"'`$:]*)\1,\s*import\.meta\.url\)/g,
+        (_match, _quote: string, relativeUrl: string) => {
+          const [relativePath = relativeUrl, query] = relativeUrl.split("?");
+          const absolute = NodePath.resolve(directory, relativePath).split(NodePath.sep).join("/");
+          const url = `/@fs/${absolute.replace(/^\//, "")}${query === undefined ? "" : `?${query}`}`;
+          return `new URL(${JSON.stringify(url)}, import.meta.url)`;
+        },
+      );
+    },
+  };
+}
+
 // Stamps index.html's title with the name branding.ts resolves once the app
 // loads, so a tab opens on the right channel instead of flashing another's.
 // Desktop swaps in its injected branding from an inline script in index.html.
@@ -317,6 +367,7 @@ export default defineConfig(({ command }) => {
     },
     assetsInclude: ["**/*.wasm"],
     plugins: [
+      monacoVscodeCssPlugin(),
       bootstrapTitlePlugin(),
       devCompressionPlugin(),
       chunkCycleGuardPlugin(),
@@ -349,6 +400,7 @@ export default defineConfig(({ command }) => {
         "effect/Order",
         "react-dom/client",
       ],
+      rolldownOptions: { plugins: [monacoVscodeDevAssetUrlsPlugin()] },
     },
     define: {
       "import.meta.env.VITE_WS_URL": JSON.stringify(configuredWsUrl ?? ""),

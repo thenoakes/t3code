@@ -872,6 +872,16 @@
       "name": "iobuffer",
       "license": "MIT",
       "sourceUrl": "https://github.com/image-js/iobuffer"
+    },
+    {
+      "repositoryUrl": "https://github.com/CodinGame/monaco-vscode-api",
+      "generatedNotice": {
+        "licenseId": "MIT",
+        "copyrights": [
+          "Copyright (c) 2022 CodinGame",
+          "Copyright (c) 2015 - present Microsoft Corporation"
+        ]
+      }
     }
   ]
 }

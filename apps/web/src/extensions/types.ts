@@ -39,6 +39,8 @@ export interface PanelProps<State = unknown> {
   readonly workspaceRoot: string | undefined;
   /** False while the panel or its tab is hidden. Pause polling and animation while false. */
   readonly visible: boolean;
+  /** The app's rendered colour scheme, including a theme being previewed in settings. */
+  readonly appearance: "light" | "dark";
   readonly state: State;
   readonly host: PanelHost<State>;
 }
@@ -73,6 +75,11 @@ export interface PanelHost<State = unknown> {
   listDirectory(relativePath: string): Promise<ReadonlyArray<PanelEntry>>;
   /** Reads a workspace text file, or null when it does not exist. Rejects like `listDirectory`. */
   readFile(relativePath: string): Promise<PanelFile | null>;
+  /**
+   * Replaces a workspace file's contents, creating it if needed. Rejects like `listDirectory`, and
+   * when the connection may not write files. It does not check for changes made since the read.
+   */
+  writeFile(relativePath: string, contents: string): Promise<void>;
   /** Opens another extension panel by id. */
   openPanel(extensionId: string): void;
   /** Closes this tab. */

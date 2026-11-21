@@ -1,8 +1,13 @@
 import type { EnvironmentId } from "@t3tools/contracts";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
-import { executeAtomQuery, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import {
+  executeAtomQuery,
+  runAtomCommand,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import { msg } from "gt-react";
 
+import { getProjectFileQueryAtom } from "~/components/files/projectFilesQueryState";
 import { m } from "~/i18n/messages";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { projectEnvironment } from "~/state/projects";
@@ -68,4 +73,20 @@ export async function readWorkspaceFile(
   if (result._tag === "Failure") throw failure(result);
   if (result.value.exists === false) return null;
   return { path, contents: result.value.contents, truncated: result.value.truncated };
+}
+
+export async function writeWorkspaceFile(
+  environmentId: EnvironmentId,
+  cwd: string | undefined,
+  relativePath: string,
+  contents: string,
+): Promise<void> {
+  const { cwd: root, path } = workspacePath(cwd, relativePath);
+  const result = await runAtomCommand(appAtomRegistry, projectEnvironment.writeFile, {
+    environmentId,
+    input: { cwd: root, relativePath: path, contents },
+  });
+  if (result._tag === "Failure") throw failure(result);
+  // A Files tab showing the same file reads it again.
+  appAtomRegistry.refresh(getProjectFileQueryAtom(environmentId, root, path));
 }

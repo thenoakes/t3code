@@ -3,13 +3,14 @@ import { useGT } from "gt-react";
 import { Suspense } from "react";
 
 import { useComposerHandleContext } from "~/composerHandleContext";
+import { useRenderedAppearance } from "~/hooks/useTheme";
 import { RenderErrorBoundary } from "~/components/RenderErrorBoundary";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "~/components/ui/empty";
 import { type ExtensionSurface, useRightPanelStore } from "~/rightPanelStore";
 import { useThreadShell } from "~/state/entities";
 import { getPanelExtension } from "./registry";
 import type { PanelHost, PanelThread } from "./types";
-import { listWorkspaceDirectory, readWorkspaceFile } from "./workspaceFiles";
+import { listWorkspaceDirectory, readWorkspaceFile, writeWorkspaceFile } from "./workspaceFiles";
 
 /** Renders an extension surface, keeping a broken or missing extension inside its own tab. */
 export function ExtensionPanel(props: {
@@ -25,6 +26,7 @@ export function ExtensionPanel(props: {
   const extension = getPanelExtension(surface.extensionId);
   const composerRef = useComposerHandleContext();
   const shell = useThreadShell(threadRef);
+  const appearance = useRenderedAppearance();
   // The React Compiler memoizes these, so the panel only re-renders when they change.
   const thread: PanelThread | null =
     shell === null
@@ -47,6 +49,8 @@ export function ExtensionPanel(props: {
       listWorkspaceDirectory(props.environmentId, props.workspaceRoot, relativePath),
     readFile: (relativePath) =>
       readWorkspaceFile(props.environmentId, props.workspaceRoot, relativePath),
+    writeFile: (relativePath, contents) =>
+      writeWorkspaceFile(props.environmentId, props.workspaceRoot, relativePath, contents),
     openPanel: (extensionId) =>
       useRightPanelStore.getState().openExtension(threadRef, extensionId, {
         multiple: getPanelExtension(extensionId)?.multiple,
@@ -90,6 +94,7 @@ export function ExtensionPanel(props: {
           thread={thread}
           workspaceRoot={props.workspaceRoot}
           visible={props.visible}
+          appearance={appearance}
           state={surface.state === undefined ? extension.initialState : surface.state}
           host={host}
         />
