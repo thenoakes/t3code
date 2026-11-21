@@ -326,6 +326,12 @@ import {
   TerminalWriteInput,
 } from "./terminal.ts";
 import {
+  LanguageServerConnectEvent,
+  LanguageServerConnectInput,
+  LanguageServerError,
+  LanguageServerSendInput,
+} from "./languageServer.ts";
+import {
   DiscoveredLocalServerList,
   ConfiguredLocalServerUrls,
   PreviewCloseInput,
@@ -534,6 +540,8 @@ export const WS_METHODS = {
   reviewGetDiffPreview: "review.getDiffPreview",
   reviewGetDiffFileContents: "review.getDiffFileContents",
 
+  languageServerConnect: "languageServer.connect",
+  languageServerSend: "languageServer.send",
   terminalOpen: "terminal.open",
   terminalAttach: "terminal.attach",
   terminalObserve: "terminal.observe",
@@ -1898,6 +1906,18 @@ const WsReviewGetDiffFileContentsRpc = Rpc.make(WS_METHODS.reviewGetDiffFileCont
   error: Schema.Union([ReviewDiffPreviewError, EnvironmentAuthorizationError]),
 });
 
+const WsLanguageServerConnectRpc = Rpc.make(WS_METHODS.languageServerConnect, {
+  payload: LanguageServerConnectInput,
+  success: LanguageServerConnectEvent,
+  error: Schema.Union([LanguageServerError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+
+const WsLanguageServerSendRpc = Rpc.make(WS_METHODS.languageServerSend, {
+  payload: LanguageServerSendInput,
+  error: Schema.Union([LanguageServerError, EnvironmentAuthorizationError]),
+});
+
 const WsTerminalOpenRpc = Rpc.make(WS_METHODS.terminalOpen, {
   payload: TerminalOpenInput,
   success: TerminalSessionSnapshot,
@@ -2562,6 +2582,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsReviewGetDiffPreviewRpc,
   WsReviewGetDiffFileContentsRpc,
   WsTerminalOpenRpc,
+  WsLanguageServerConnectRpc,
+  WsLanguageServerSendRpc,
   WsTerminalAttachRpc,
   WsTerminalObserveRpc,
   WsTerminalWriteRpc,

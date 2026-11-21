@@ -212,6 +212,9 @@ export const RPC_REQUIRED_SCOPES = {
   [WS_METHODS.terminalAttach]: AuthTerminalOperateScope,
   [WS_METHODS.terminalObserve]: AuthTerminalReadScope,
   [WS_METHODS.terminalWrite]: AuthTerminalOperateScope,
+  // A language server runs project code (tsserver plugins, build scripts), as a terminal does.
+  [WS_METHODS.languageServerConnect]: AuthTerminalOperateScope,
+  [WS_METHODS.languageServerSend]: AuthTerminalOperateScope,
   [WS_METHODS.terminalResize]: AuthTerminalOperateScope,
   [WS_METHODS.terminalClear]: AuthTerminalOperateScope,
   [WS_METHODS.terminalClose]: AuthTerminalOperateScope,
