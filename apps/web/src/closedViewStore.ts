@@ -86,6 +86,8 @@ const isClosedViewEntry = (entry: unknown): entry is ClosedViewEntry => {
       );
     case "thread":
       return typeof surface.threadId === "string" && surface.id === `thread:${surface.threadId}`;
+    case "extension":
+      return typeof surface.extensionId === "string" && surface.id.startsWith("ext:");
     case "linked-thread":
       return (
         (surface.title === null || typeof surface.title === "string") &&

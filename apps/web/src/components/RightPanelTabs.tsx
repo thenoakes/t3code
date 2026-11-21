@@ -51,6 +51,7 @@ import {
   Globe2,
   MessagesSquare,
   Plus,
+  Puzzle,
   TerminalSquare,
   Volume2Icon,
   VolumeOffIcon,
@@ -70,6 +71,7 @@ import { isElectron } from "~/env";
 import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import { linkedThreadTitle } from "~/linkedThreadSurface";
 import type { RightPanelSurface } from "~/rightPanelStore";
+import { getPanelExtension, panelExtensions } from "~/extensions/registry";
 import { cn } from "~/lib/utils";
 import { issueStatePresentation } from "~/components/issue/issuePresentation";
 import { issueEnvironment } from "~/state/issues";
@@ -159,6 +161,8 @@ export interface RightPanelTabsProps {
   onAddDevice: () => void;
   /** Absent where side chats are not offered. */
   onAddSideChat?: (() => void) | undefined;
+  /** Absent where extension panels are not offered. */
+  onAddExtension?: ((extensionId: string) => void) | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -345,6 +349,8 @@ function RightPanelEmptyState(props: {
   onAddDevice: () => void;
   /** Absent where side chats are not offered. */
   onAddSideChat?: (() => void) | undefined;
+  /** Absent where extension panels are not offered. */
+  onAddExtension?: ((extensionId: string) => void) | undefined;
   browserAvailable: boolean;
   terminalAvailable: boolean;
   diffAvailable: boolean;
@@ -431,6 +437,7 @@ function RightPanelEmptyState(props: {
           },
         ]
       : []),
+    ...extensionSurfaceActions(props.onAddExtension),
   ] as const;
 
   type SurfaceAction = (typeof actions)[number];
@@ -593,6 +600,20 @@ function RightPanelEmptyState(props: {
   );
 }
 
+/** Extension panels as add-tab menu entries; their titles are the extension's own, untranslated. */
+function extensionSurfaceActions(onAddExtension: ((extensionId: string) => void) | undefined) {
+  if (!onAddExtension) return [];
+  return panelExtensions.map((extension) => ({
+    label: extension.title,
+    ...(extension.description ? { description: extension.description } : {}),
+    icon: extension.icon,
+    shortcut: extension.shortcut ?? "",
+    available: true,
+    disabledReason: "",
+    onClick: () => onAddExtension(extension.id),
+  }));
+}
+
 function surfaceTitle(
   surface: RightPanelSurface,
   sessions: Readonly<Record<string, PreviewSessionSnapshot>>,
@@ -630,6 +651,8 @@ function surfaceTitle(
         surface,
         resolve(msg("Thread on {label}", { label: surface.label })),
       );
+    case "extension":
+      return getPanelExtension(surface.extensionId)?.title ?? surface.extensionId;
     case "preview": {
       const snapshot = surface.resourceId ? sessions[surface.resourceId] : null;
       if (!snapshot || snapshot.navStatus._tag === "Idle") return resolve(msg("Browser"));
@@ -724,6 +747,10 @@ function SurfaceIcon({
       return <SideChatTabIcon environmentId={environmentId} threadId={surface.threadId} />;
     case "linked-thread":
       return <MessagesSquare className="size-3 shrink-0" />;
+    case "extension": {
+      const Icon = getPanelExtension(surface.extensionId)?.icon ?? Puzzle;
+      return <Icon className="size-3 shrink-0" />;
+    }
     case "device":
       return surface.target?.platform === "ios" ? (
         <AppleIcon className="size-3 shrink-0" />
@@ -1272,6 +1299,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           },
         ]
       : []),
+    ...extensionSurfaceActions(props.onAddExtension),
   ] as const;
 
   const handleAddSurfaceMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -1693,6 +1721,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddPullRequests={props.onAddPullRequests}
             onAddDevice={props.onAddDevice}
             onAddSideChat={props.onAddSideChat}
+            onAddExtension={props.onAddExtension}
             browserAvailable={props.browserAvailable}
             terminalAvailable={props.terminalAvailable}
             diffAvailable={props.diffAvailable}

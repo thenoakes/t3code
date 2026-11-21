@@ -12,6 +12,7 @@ import type {
 } from "@t3tools/contracts";
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
 import { lazy, Suspense } from "react";
+import { ExtensionPanel } from "../../extensions/ExtensionPanel";
 import { LinkedThreadPane } from "./LinkedThreadPane";
 import SideThreadPane from "./SideThreadPane";
 import type { ComposerImageAttachment, DraftId } from "../../composerDraftStore";
@@ -250,6 +251,18 @@ export function RightPanelSurfaceContent(props: {
             }}
           />
         </Suspense>
+      );
+    case "extension":
+      return (
+        <ExtensionPanel
+          key={surface.id}
+          surface={surface}
+          threadRef={threadRef}
+          environmentId={props.environmentId}
+          workspaceRoot={props.files.workspaceRoot}
+          visible={visible && props.activeSurfaceId === surface.id}
+          onClose={() => onCloseSurface(surface)}
+        />
       );
     case "files":
     case "file": {

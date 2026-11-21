@@ -1,0 +1,9 @@
+{
+  "go.alternateTools": {
+    "go": "/Users/matthewnoakes/.local/share/mise/shims/go",
+    "gopls": "/Users/matthewnoakes/.local/share/mise/shims/gopls"
+  },
+  "debug.javascript.defaultRuntimeExecutable": {
+    "pwa-node": "/Users/matthewnoakes/.local/share/mise/shims/node"
+  }
+}

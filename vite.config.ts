@@ -595,6 +595,8 @@ export default defineConfig({
           "**/{test-fixtures,*TestFixtures}.ts",
           "apps/mobile/src/features/development/**",
           "packages/client-runtime/src/rpc/**",
+          // Drop-in panels are written outside the app and ship their own copy.
+          "apps/web/src/extensions/panels/**",
         ],
         rules: { "t3code/no-untranslated-copy": "error" },
       },

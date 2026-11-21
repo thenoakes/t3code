@@ -39,6 +39,8 @@ import { openDeviceSetupDialog } from "./ChatOverlayHosts";
 import { previewEnvironment } from "../../state/preview";
 import { useAtomCommand } from "../../state/use-atom-command";
 import type { ChatShortcutCommands } from "./useChatShortcuts";
+import { getPanelExtension } from "../../extensions/registry";
+
 interface RightPanelActionsInput {
   readonly activeThreadRef: ScopedThreadRef | null;
   readonly activeProject: EnvironmentProject | null;
@@ -171,6 +173,13 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     useRightPanelStore.getState().open(activeThreadRef, "device");
   };
   const addDeviceSurfaceStable = useStableCallback(addDeviceSurface);
+  const addExtensionSurface = (extensionId: string) => {
+    if (!activeThreadRef) return;
+    useRightPanelStore.getState().openExtension(activeThreadRef, extensionId, {
+      multiple: getPanelExtension(extensionId)?.multiple,
+    });
+  };
+  const addExtensionSurfaceStable = useStableCallback(addExtensionSurface);
   const openFileSurface = (relativePath: string) => {
     if (!activeThreadRef || !activeProject) return;
     useRightPanelStore.getState().openFile(activeThreadRef, relativePath);
@@ -348,6 +357,7 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
     shortcuts,
     activateRightPanelSurfaceStable,
     addDeviceSurfaceStable,
+    addExtensionSurfaceStable,
     addDiffSurfaceStable,
     addFilesSurfaceStable,
     addPullRequestSurfaceStable,

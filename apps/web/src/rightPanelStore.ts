@@ -32,6 +32,7 @@ const RIGHT_PANEL_KINDS = [
   "issue",
   "thread",
   "linked-thread",
+  "extension",
 ] as const;
 export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
@@ -109,7 +110,16 @@ export type RightPanelSurface =
    */
   | ThreadSurface
   /** A linked environment's thread, read through `viaEnvironmentId`; it has no thread here. */
-  | LinkedThreadSurface;
+  | LinkedThreadSurface
+  /** A panel from `extensions/panels`; `state` is the extension's own, kept JSON-safe. */
+  | ExtensionSurface;
+
+export type ExtensionSurface = {
+  id: `ext:${string}`;
+  kind: "extension";
+  extensionId: string;
+  state?: unknown;
+};
 
 export type ThreadSurface = { id: `thread:${string}`; kind: "thread"; threadId: ThreadId };
 
@@ -187,12 +197,22 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<
       RightPanelKind,
-      "file" | "terminal" | "pull-request" | "issue" | "thread" | "linked-thread"
+      "file" | "terminal" | "pull-request" | "issue" | "thread" | "linked-thread" | "extension"
     >,
   ) => void;
   /** Opens a side chat or subagent of `ref`'s environment as a tab; `ref` itself has no tab. */
   openThread: (ref: ScopedThreadRef, threadId: ThreadId) => void;
   openLinkedThread: (ref: ScopedThreadRef, target: LinkedThreadTarget) => void;
+  /**
+   * `multiple` opens another tab; otherwise an open tab of the extension is focused. `surface`
+   * restores a closed tab as it was.
+   */
+  openExtension: (
+    ref: ScopedThreadRef,
+    extensionId: string,
+    options?: { multiple?: boolean | undefined; surface?: ExtensionSurface },
+  ) => void;
+  setExtensionState: (ref: ScopedThreadRef, surfaceId: string, state: unknown) => void;
   /** Records the title the linked environment gave, so the tab and a reopened one show it. */
   setLinkedThreadTitle: (ref: ScopedThreadRef, surfaceId: string, title: string) => void;
   openDevice: (ref: ScopedThreadRef, target: DeviceTabTarget, automatic?: boolean) => void;
@@ -261,7 +281,7 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<
       RightPanelKind,
-      "file" | "terminal" | "pull-request" | "issue" | "thread" | "linked-thread"
+      "file" | "terminal" | "pull-request" | "issue" | "thread" | "linked-thread" | "extension"
     >,
   ) => void;
   setThreadPanelOpen: (
@@ -287,7 +307,14 @@ const DEFAULT_THREAD_PANEL_VISIBILITY: ThreadPanelVisibility = {
 const singletonSurface = (
   kind: Exclude<
     RightPanelKind,
-    "file" | "preview" | "terminal" | "pull-request" | "issue" | "thread" | "linked-thread"
+    | "file"
+    | "preview"
+    | "terminal"
+    | "pull-request"
+    | "issue"
+    | "thread"
+    | "linked-thread"
+    | "extension"
   >,
 ): RightPanelSurface => {
   switch (kind) {
@@ -620,6 +647,14 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                       const decoded = decodeLinkedThreadSurface(surface);
                       return decoded === null ? [] : [decoded];
                     }
+                    if (surface.kind === "extension") {
+                      // An uninstalled extension keeps its tab, which says so, until closed.
+                      return typeof surface.extensionId === "string" &&
+                        typeof surface.id === "string" &&
+                        surface.id.startsWith("ext:")
+                        ? [surface]
+                        : [];
+                    }
                     if (
                       (surface.kind === "file" || surface.kind === "files") &&
                       "folderTrail" in surface &&
@@ -892,6 +927,35 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
                 entry.id === surface.id && entry.kind === "linked-thread"
                   ? { ...surface, title: surface.title ?? entry.title }
                   : entry,
+              ),
+            };
+          }),
+        ),
+      openExtension: (ref, extensionId, options = {}) =>
+        set((state) =>
+          userAction(state, scopedThreadKey(ref), (current) => {
+            if (options.surface) return upsertSurface(current, options.surface);
+            const ids = new Set(current.surfaces.map((surface) => surface.id));
+            if (!options.multiple) {
+              const existing = current.surfaces.find(
+                (surface) => surface.kind === "extension" && surface.extensionId === extensionId,
+              );
+              if (existing) return upsertSurface(current, existing);
+            }
+            let id: ExtensionSurface["id"] = `ext:${extensionId}`;
+            for (let index = 2; ids.has(id); index += 1) id = `ext:${extensionId}:${index}`;
+            return upsertSurface(current, { id, kind: "extension", extensionId });
+          }),
+        ),
+      setExtensionState: (ref, surfaceId, extensionState) =>
+        set((state) =>
+          automaticUpdate(state, scopedThreadKey(rightPanelHostRef(ref)), (current) => {
+            const existing = current.surfaces.find((surface) => surface.id === surfaceId);
+            if (existing?.kind !== "extension" || existing.state === extensionState) return current;
+            return {
+              ...current,
+              surfaces: current.surfaces.map((surface) =>
+                surface.id === surfaceId ? { ...existing, state: extensionState } : surface,
               ),
             };
           }),

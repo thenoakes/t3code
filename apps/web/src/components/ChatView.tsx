@@ -2480,6 +2480,7 @@ export default function ChatView(props: ChatViewProps) {
   const {
     activateRightPanelSurfaceStable,
     addDeviceSurfaceStable,
+    addExtensionSurfaceStable,
     addDiffSurfaceStable,
     addFilesSurfaceStable,
     addPullRequestSurfaceStable,
@@ -4187,6 +4188,7 @@ export default function ChatView(props: ChatViewProps) {
           onAddPullRequests={addPullRequestsSurfaceStable}
           onAddDevice={addDeviceSurfaceStable}
           onAddSideChat={sideChatsOffered ? openSideChatStable : undefined}
+          onAddExtension={addExtensionSurfaceStable}
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={activeProject !== null && canOperateTerminal}
           diffAvailable={isServerThread && diffAvailable}

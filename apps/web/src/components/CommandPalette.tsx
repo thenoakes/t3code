@@ -180,6 +180,7 @@ import {
   selectActiveRightPanel,
   useRightPanelStore,
 } from "../rightPanelStore";
+import { panelExtensions } from "../extensions/registry";
 import { getLatestThreadForProject, sortThreads } from "@t3tools/client-runtime/state/thread-sort";
 import { effectiveSnoozed } from "@t3tools/client-runtime/state/thread-settled";
 import {
@@ -1532,6 +1533,25 @@ function OpenCommandPaletteDialog(props: {
         useRightPanelStore.getState().open(threadRef, "pull-requests");
       },
     });
+  }
+
+  if (activeThread !== null) {
+    const threadRef = scopeThreadRef(activeThread.environmentId, activeThread.id);
+    for (const extension of panelExtensions) {
+      const Icon = extension.icon;
+      actionItems.push({
+        kind: "action",
+        value: `action:open-extension:${extension.id}`,
+        searchTerms: ["panel", "extension", extension.title],
+        title: gt("Open {title} panel", { title: extension.title }),
+        icon: <Icon className={ITEM_ICON_CLASS} />,
+        run: async () => {
+          useRightPanelStore
+            .getState()
+            .openExtension(threadRef, extension.id, { multiple: extension.multiple });
+        },
+      });
+    }
   }
 
   if (activeThread !== null && canShareActiveThreadWithGuest) {

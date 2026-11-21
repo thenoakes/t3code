@@ -595,6 +595,55 @@ describe("rightPanelStore", () => {
     });
   });
 
+  it("keeps an extension tab's state across reload and reopen, and numbers extra tabs", async () => {
+    const store = useRightPanelStore.getState();
+    const surfaces = () =>
+      selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, refA).surfaces;
+    store.openExtension(refA, "notes");
+    store.openExtension(refA, "notes");
+    store.openExtension(refA, "notes", { multiple: true });
+    expect(surfaces().map((surface) => surface.id)).toEqual(["ext:notes", "ext:notes:2"]);
+
+    store.setExtensionState(refA, "ext:notes", { text: "remember" });
+    await reloadRightPanelStore();
+    expect(surfaces()[0]).toEqual({
+      id: "ext:notes",
+      kind: "extension",
+      extensionId: "notes",
+      state: { text: "remember" },
+    });
+
+    store.closeSurface(refA, "ext:notes");
+    await reopenClosedView(useClosedViewStore.getState().entries[0]!, {
+      workspaceAvailable: true,
+      openPreview: () => {
+        throw new Error("An extension tab must not create a browser session");
+      },
+    });
+    expect(surfaces().find((surface) => surface.id === "ext:notes")).toMatchObject({
+      state: { text: "remember" },
+    });
+  });
+
+  it("keeps saved extension tabs, even uninstalled ones, and drops malformed ones", () => {
+    const migrated = migratePersistedRightPanelState({
+      byThreadKey: {
+        "env-1:thread-A": {
+          isOpen: true,
+          activeSurfaceId: "ext:gone",
+          surfaces: [
+            { id: "ext:gone", kind: "extension", extensionId: "gone" },
+            { id: "ext:no-id", kind: "extension" },
+            { id: "notes", kind: "extension", extensionId: "notes" },
+          ],
+        },
+      },
+    });
+    expect(selectThreadRightPanelState(migrated.byThreadKey, refA).surfaces).toEqual([
+      { id: "ext:gone", kind: "extension", extensionId: "gone" },
+    ]);
+  });
+
   it("opens a side chat or subagent once per thread, and never the panel's own thread", () => {
     const store = useRightPanelStore.getState();
     const child = ThreadId.make("child");
